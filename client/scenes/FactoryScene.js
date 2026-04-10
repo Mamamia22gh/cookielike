@@ -22,9 +22,9 @@ export class FactoryScene {
     this.scene.background = new THREE.Color(PALETTE.bg);
     this.scene.fog = new THREE.FogExp2(PALETTE.bg, 0.008);
 
-    this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 200);
-    this.camera.position.set(0, 1.7, 0);
-    this.camera.lookAt(0, 1.7, -5);
+    this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+    this.camera.position.set(-0.5, 1.7, -0.8);
+    this.camera.lookAt(-0.5, 1.7, -5);
 
     this.controls = new PointerLockControls(this.camera, renderer.domElement);
 
@@ -176,9 +176,9 @@ export class FactoryScene {
 
     const woodMat = createMaterial(0x6a5030, 0.65, 0.05);
 
-    // Tabletop
-    const top = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.06, 1.0), woodMat);
-    top.position.set(0, 0.84, 0);
+    // Tabletop (reduced depth on camera side by 15%)
+    const top = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.06, 1.7), woodMat);
+    top.position.set(0, 0.84, -0.15);
     top.castShadow = true;
     top.receiveShadow = true;
     deskGrp.add(top);
@@ -186,7 +186,7 @@ export class FactoryScene {
     // Legs
     const legMat = createMaterial(0x5a4428, 0.7, 0.05);
     for (const x of [-1.65, 1.65]) {
-      for (const z of [-0.4, 0.4]) {
+      for (const z of [-0.9, 0.7]) {
         const leg = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.84, 0.06), legMat);
         leg.position.set(x, 0.42, z);
         leg.castShadow = true;
@@ -194,32 +194,46 @@ export class FactoryScene {
       }
     }
 
-    // Drawer unit (right side)
+    // Drawers unit under desk (right side)
+    const drawerUnitMat = createMaterial(0x5a4428, 0.7, 0.05);
+    const drawerUnit = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 1.4), drawerUnitMat);
+    drawerUnit.position.set(1.2, 0.42, -0.1);
+    drawerUnit.castShadow = true;
+    deskGrp.add(drawerUnit);
+    // Drawer handles
+    const drawerHandleMat = createMaterial(PALETTE.metalDark, 0.3, 0.8);
+    for (let dy = 0; dy < 3; dy++) {
+      const dHandle = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.02, 0.04), drawerHandleMat);
+      dHandle.position.set(1.2, 0.2 + dy * 0.22, 0.62);
+      deskGrp.add(dHandle);
+    }
+
+    // Caisson (small box on the desk, between radio and PC)
     const drawerMat = createMaterial(0x5a4428, 0.7, 0.05);
-    const drawer = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 0.8), drawerMat);
-    drawer.position.set(1.2, 0.55, 0);
+    const drawer = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.25, 0.4), drawerMat);
+    drawer.position.set(-0.1, 0.99, -0.5);
     drawer.castShadow = true;
     deskGrp.add(drawer);
 
-    // Drawer handles
+    // Caisson handles
     const handleMat = createMaterial(PALETTE.metalDark, 0.3, 0.8);
-    for (let dy = 0; dy < 3; dy++) {
-      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.02, 0.04), handleMat);
-      handle.position.set(1.2, 0.38 + dy * 0.12, 0.42);
+    for (let dy = 0; dy < 2; dy++) {
+      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.02, 0.04), handleMat);
+      handle.position.set(-0.1, 0.92 + dy * 0.1, -0.28);
       deskGrp.add(handle);
     }
 
     // Coffee mug
     const mugMat = createMaterial(0xddddcc, 0.5, 0.1);
     const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.035, 0.1, 8), mugMat);
-    mug.position.set(-0.8, 0.92, 0.15);
+    mug.position.set(0.1, 0.92, 0.3);
     deskGrp.add(mug);
 
-    // Stack of papers
+    // Stack of papers (left side of desk)
     const paperMat = createMaterial(0xeeeeee, 0.9, 0.0);
     const papers = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.04, 0.3), paperMat);
-    papers.position.set(1.3, 0.89, 0.1);
-    papers.rotation.y = 0.15;
+    papers.position.set(-1.2, 0.89, 0.3);
+    papers.rotation.y = -0.2;
     deskGrp.add(papers);
 
     // Desk lamp (left side)
@@ -240,7 +254,7 @@ export class FactoryScene {
     lampShade.position.set(-1.38, 1.38, -0.18);
     deskGrp.add(lampShade);
 
-    // Post-its scattered on the desk
+    // Post-its on the wall & one on the desk
     const postitColors = [0xffeb3b, 0xff99cc, 0xccff90, 0x80deea, 0xffb74d];
     const postitGeo = new THREE.BoxGeometry(0.08, 0.002, 0.08);
     const lineGeo = new THREE.BoxGeometry(0.05, 0.003, 0.004);
@@ -251,9 +265,15 @@ export class FactoryScene {
       const mat = createMaterial(color, 0.9, 0.1);
       const postit = new THREE.Mesh(postitGeo, mat);
       
-      // Random position on the desk (avoiding the left side where the radio and lamp are)
-      postit.position.set(-0.5 + Math.random() * 1.8, 0.871, (Math.random() - 0.5) * 0.6);
-      postit.rotation.y = (Math.random() - 0.5) * 2;
+      if (i === 0) {
+        // One post-it on the desk
+        postit.position.set(0.3, 0.871, 0.2);
+        postit.rotation.y = 0.4;
+      } else {
+        // On the wall between radio and screen (x from -0.8 to 0.5)
+        postit.position.set(-0.8 + Math.random() * 1.3, 1.2 + Math.random() * 0.6, -1.39);
+        postit.rotation.set(Math.PI / 2, 0, (Math.random() - 0.5) * 0.5);
+      }
       
       // Fake text lines
       for (let j = 0; j < 3; j++) {

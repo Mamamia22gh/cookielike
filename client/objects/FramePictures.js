@@ -2,40 +2,56 @@ import * as THREE from 'three';
 import { createMaterial } from '../utils/Materials.js';
 
 /**
- * Creepy pixelated framed pictures on the walls.
- * Loaded from /textures/ folder.
+ * Creepy framed pictures on the walls.
+ * Loads real images from /textures/.
  */
 
-const FRAMES = [
-  // { file, pos [x,y,z], rotY, scale [w,h] }
-  { file: 'textures/frame_portrait2.jpg', pos: [-2.5, 1.6, -4.98], rotY: 0,            size: [0.7, 0.9] },
-  { file: 'textures/frame_skeleton.jpg',  pos: [ 2.2, 1.8, -4.98], rotY: 0,            size: [0.8, 0.6] },
-  { file: 'textures/frame_portrait2.jpg', pos: [-4.98, 1.5, -1.0], rotY: Math.PI / 2,  size: [0.6, 0.8] },
-  { file: 'textures/frame_skeleton.jpg',  pos: [ 4.98, 1.7,  1.5], rotY: -Math.PI / 2, size: [0.7, 0.5] },
-];
+const loader = new THREE.TextureLoader();
 
-function makePixelatedTexture(url) {
-  const tex = new THREE.TextureLoader().load(url);
-  // Nearest filter = pixelated / low-fi look
+function loadTexture(path) {
+  const tex = loader.load(path, (t) => {
+    // Downscale to pixelate
+    const img = t.image;
+    const small = document.createElement('canvas');
+    const px = 48;
+    small.width = px;
+    small.height = px;
+    const sctx = small.getContext('2d');
+    sctx.imageSmoothingEnabled = false;
+    sctx.drawImage(img, 0, 0, px, px);
+    t.image = small;
+    t.needsUpdate = true;
+  });
   tex.minFilter = THREE.NearestFilter;
   tex.magFilter = THREE.NearestFilter;
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
 
-function makeFrameMesh(file, size) {
+// R=5, walls are BoxGeometry(thick=0.15) at ±R → inner face at ±4.925
+const W = 4.90; // just in front of inner wall face
+const FRAMES = [
+  // North wall — above radio
+  { path: '/textures/frame_chef.webp',      pos: [-1.0, 2.0, -W], rotY: 0,            size: [0.5, 0.65] },
+  // North wall — right side
+  { path: '/textures/frame_skeleton.jpg',    pos: [ 3.5, 1.9, -W], rotY: 0,            size: [0.55, 0.45] },
+  // East wall
+  { path: '/textures/frame_portrait2.jpg',   pos: [ W, 1.6, -1.0], rotY: -Math.PI / 2, size: [0.5, 0.6] },
+];
+
+function makeFrameMesh(path, size) {
   const [w, h] = size;
   const group = new THREE.Group();
 
-  // Picture itself
-  const tex = makePixelatedTexture(file);
-  const picMat = new THREE.MeshBasicMaterial({ map: tex });
+  // Picture itself — standard material so it reacts to room lighting
+  const tex = loadTexture(path);
+  const picMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, metalness: 0.0 });
   const pic = new THREE.Mesh(new THREE.PlaneGeometry(w, h), picMat);
   group.add(pic);
 
   // Wooden frame border
   const frameMat = createMaterial(0x3a2a1a, 0.8, 0.05);
-  const bw = 0.04; // border width
+  const bw = 0.04;
   // Top / bottom
   for (const dy of [h / 2 + bw / 2, -h / 2 - bw / 2]) {
     const b = new THREE.Mesh(new THREE.BoxGeometry(w + bw * 2, bw, 0.03), frameMat);
@@ -58,16 +74,11 @@ function makeFrameMesh(file, size) {
   return group;
 }
 
-export function buildFramePictures(scene) {
+export function buildFramePictures(parent) {
   for (const f of FRAMES) {
-    const mesh = makeFrameMesh(f.file, f.size);
+    const mesh = makeFrameMesh(f.path, f.size);
     mesh.position.set(...f.pos);
     mesh.rotation.y = f.rotY;
-    // Push slightly off wall
-    const offset = 0.02;
-    if (f.rotY === 0)              mesh.position.z += offset;
-    else if (f.rotY > 0)           mesh.position.x += offset;
-    else if (f.rotY < 0)           mesh.position.x -= offset;
-    scene.add(mesh);
+    parent.add(mesh);
   }
 }

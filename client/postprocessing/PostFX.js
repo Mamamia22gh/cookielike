@@ -9,7 +9,7 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 const VignetteShader = {
   uniforms: {
     tDiffuse: { value: null },
-    offset: { value: 1.0 },
+    offset:   { value: 1.0 },
     darkness: { value: 1.2 },
   },
   vertexShader: `
@@ -36,8 +36,8 @@ const VignetteShader = {
 
 const FilmGrainShader = {
   uniforms: {
-    tDiffuse: { value: null },
-    time: { value: 0 },
+    tDiffuse:  { value: null },
+    time:      { value: 0 },
     intensity: { value: 0.08 },
   },
   vertexShader: `
@@ -66,8 +66,8 @@ const FilmGrainShader = {
 
 const PixelateShader = {
   uniforms: {
-    tDiffuse: { value: null },
-    resolution: { value: new THREE.Vector2(1920, 1080) },
+    tDiffuse:  { value: null },
+    resolution:{ value: new THREE.Vector2(1920, 1080) },
     pixelSize: { value: 3.0 },
   },
   vertexShader: `
@@ -92,10 +92,10 @@ const PixelateShader = {
 
 const ColorCorrectionShader = {
   uniforms: {
-    tDiffuse: { value: null },
+    tDiffuse:   { value: null },
     saturation: { value: 1.15 },
     brightness: { value: 1.35 },
-    contrast: { value: 1.05 },
+    contrast:   { value: 1.05 },
   },
   vertexShader: `
     varying vec2 vUv;
@@ -122,7 +122,60 @@ const ColorCorrectionShader = {
 };
 
 /**
- * Post-processing: bloom, color, pixelation, vignette, grain.
+ * Pannini projection — cylindrical perspective.
+ * Reduces wide-angle straight-line distortion while keeping center sharp.
+ * Applied AFTER render, BEFORE bloom so halos follow the correct geometry.
+ *
+ * d = 0 → standard rectilinear  
+ * d = 1 → full Pannini (strong compression of the edges)
+ *
+ * Derivation: given an output pixel at Pannini coord xp,
+ * solve for the rectilinear θ via:
+ *   xp = sin(θ) / (cos(θ) + d)
+ *   => (1 + xp²)cos²θ + 2d·xp²·cosθ + (d²·xp² − 1) = 0
+ * then sample from tan(θ) in rectilinear image.
+ */
+const PanniniShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    d:        { value: 0.5 },
+    aspect:   { value: 16 / 9 },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float d;
+    uniform float aspect;
+    varying vec2 vUv;
+
+    void main() {
+      vec2 uv = vUv * 2.0 - 1.0;
+
+      // Horizontal distance from center squared
+      float x2 = uv.x * uv.x;
+
+      // Pannini-style edge compression:
+      // center (x=0) is untouched, edges get pulled inward
+      float hScale = 1.0 / (1.0 + d * x2);
+      uv.x *= hScale;
+
+      // Slight vertical correction (Pannini compresses verticals at edges)
+      uv.y *= mix(1.0, hScale, 0.3);
+
+      vec2 sUV = uv * 0.5 + 0.5;
+      gl_FragColor = texture2D(tDiffuse, sUV);
+    }
+  `,
+};
+
+/**
+ * Post-processing: pannini, bloom, color, pixelation, vignette, grain.
  * Style: Cloverpit / Content Warning retro.
  */
 export function createPostFX(renderer, scene, camera) {
@@ -131,6 +184,12 @@ export function createPostFX(renderer, scene, camera) {
 
   const renderPass = new RenderPass(scene, camera);
   composer.addPass(renderPass);
+
+  // Pannini first — geometric warp before any blur/bloom
+  const panniniPass = new ShaderPass(PanniniShader);
+  panniniPass.uniforms.aspect.value = size.x / size.y;
+  panniniPass.uniforms.d.value = 0.2;
+  composer.addPass(panniniPass);
 
   const bloomPass = new UnrealBloomPass(size, 0.5, 0.4, 0.65);
   composer.addPass(bloomPass);
@@ -145,7 +204,7 @@ export function createPostFX(renderer, scene, camera) {
 
   const vignettePass = new ShaderPass(VignetteShader);
   vignettePass.uniforms.offset.value = 1.0;
-    vignettePass.uniforms.darkness.value = 0.35;
+  vignettePass.uniforms.darkness.value = 0.35;
   composer.addPass(vignettePass);
 
   const grainPass = new ShaderPass(FilmGrainShader);
@@ -157,10 +216,12 @@ export function createPostFX(renderer, scene, camera) {
     renderPass,
     bloomPass,
     pixelPass,
+    panniniPass,
     grainPass,
     resize(w, h) {
       composer.setSize(w, h);
       pixelPass.uniforms.resolution.value.set(w, h);
+      panniniPass.uniforms.aspect.value = w / h;
     },
     update(dt) {
       grainPass.uniforms.time.value += dt;

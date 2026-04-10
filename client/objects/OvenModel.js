@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+﻿import * as THREE from 'three';
 import { PALETTE, createMaterial, OVEN_COLORS } from '../utils/Materials.js';
 import { CookieModel } from './CookieModel.js';
 
@@ -61,11 +61,6 @@ export class OvenModel {
     right.castShadow = true;
     this.group.add(right);
 
-    // Interior back — darker for depth
-    const interiorMat = createMaterial(0x222222, 0.8, 0.1);
-    const interiorBack = new THREE.Mesh(new THREE.BoxGeometry(bodyW - 0.3, bodyH - 0.3, 0.05), interiorMat);
-    interiorBack.position.set(0, bodyH / 2, -bodyD / 2 + 0.2);
-    this.group.add(interiorBack);
 
     // Shake reference (use back wall as body proxy)
     this.body = back;

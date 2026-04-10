@@ -79,6 +79,16 @@ export class RadioPlayer {
     this.group.add(indicator);
     this._indicator = indicator;
 
+    // Point light from indicator
+    this._indicatorLight = new THREE.PointLight(0x22aa44, 0, 3);
+    this._indicatorLight.position.set(0, 0.6, 0.3);
+    this.group.add(this._indicatorLight);
+
+    // Warm dial backlight
+    this._dialLight = new THREE.PointLight(0xddcc88, 0, 2);
+    this._dialLight.position.set(0, 0.55, 0.3);
+    this.group.add(this._dialLight);
+
     // Top lip/rim
     const rimMat = createMaterial(0x5a3a1a, 0.6, 0.1);
     const rim = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.04, 0.55), rimMat);
@@ -97,7 +107,7 @@ export class RadioPlayer {
 
     // Small table/shelf under the radio
     const shelfMat = createMaterial(0x5a4a3e, 0.65, 0.1);
-    const shelf = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.06, 0.6), shelfMat);
+    const shelf = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.06, 0.55), shelfMat);
     shelf.position.y = -0.01;
     shelf.receiveShadow = true;
     this.group.add(shelf);
@@ -124,6 +134,8 @@ export class RadioPlayer {
 
     // Indicator on
     this._indicatorMat.emissiveIntensity = 0.6;
+    this._indicatorLight.intensity = 1.5;
+    this._dialLight.intensity = 0.8;
 
     // Create positional audio
     this._sound = new THREE.PositionalAudio(this._listener);
@@ -289,13 +301,18 @@ export class RadioPlayer {
     if (this._sound?.isPlaying) this._sound.stop();
     if (this._crackleSound?.isPlaying) this._crackleSound.stop();
     this._indicatorMat.emissiveIntensity = 0.0;
+    this._indicatorLight.intensity = 0;
+    this._dialLight.intensity = 0;
   }
 
   update(dt) {
     if (!this._playing) return;
     // Indicator light pulsing
     const t = Date.now() * 0.002;
-    this._indicatorMat.emissiveIntensity = 0.4 + Math.sin(t) * 0.2;
+    const pulse = 0.4 + Math.sin(t) * 0.2;
+    this._indicatorMat.emissiveIntensity = pulse;
+    this._indicatorLight.intensity = 0.8 + Math.sin(t) * 0.5;
+    this._dialLight.intensity = 0.5 + Math.sin(t * 0.7) * 0.2;
 
     // Auto-advance to next track when current finishes
     if (this._sound && !this._sound.isPlaying && !this._trackEnded && this._trackStarted) {

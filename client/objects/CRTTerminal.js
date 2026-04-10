@@ -50,14 +50,14 @@ export class CRTTerminal {
     const screenGeo = new THREE.PlaneGeometry(bodyW - 0.35, bodyH - 0.4);
     const screenMat = new THREE.MeshBasicMaterial({ map: this._texture });
     this._screen = new THREE.Mesh(screenGeo, screenMat);
-    this._screen.position.set(0, bodyH / 2 + 0.02, 0.06);
+    this._screen.position.set(0, bodyH / 2 + 0.02, 0.056);
     this.group.add(this._screen);
 
     const glowMat = new THREE.MeshBasicMaterial({
       color: 0x00ff44, transparent: true, opacity: 0.02, blending: THREE.AdditiveBlending,
     });
     const glow = new THREE.Mesh(new THREE.PlaneGeometry(bodyW - 0.3, bodyH - 0.35), glowMat);
-    glow.position.set(0, bodyH / 2 + 0.02, 0.065);
+    glow.position.set(0, bodyH / 2 + 0.02, 0.057);
     this.group.add(glow);
 
     this.screenLight = new THREE.PointLight(0x00ff44, 1.5, 6);
@@ -120,56 +120,97 @@ export class CRTTerminal {
     // ── Keyboard ──
     const kbMat = createMaterial(0xb0a890, 0.7, 0.05);
     const keyboard = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.04, 0.45), kbMat);
-    keyboard.position.set(0, 0.02, 0.55);
+    keyboard.position.set(0, 0.02, 0.6);
     this.group.add(keyboard);
 
     const keyMat = createMaterial(0x8a8270, 0.6, 0.05);
-    const keyGeo = new THREE.BoxGeometry(0.07, 0.025, 0.07);
+    const keyGeo = new THREE.BoxGeometry(0.065, 0.025, 0.065);
+    const keySpX = 0.085;
+    const keySpZ = 0.095;
+    const kbStartX = -0.46;
+    const kbStartZ = 0.44;
 
-    for (let row = 0; row < 4; row++) {
+    // Interactive key positions (on the grid)
+    // Row 2 col 9: arrow up
+    // Row 3 cols 8,9,10: arrow left, down, right
+    // Row 3 col 11: enter
+    // Row 0 col 11: backspace
+    const interactiveSlots = new Set();
+    interactiveSlots.add('2_9');  // up
+    interactiveSlots.add('3_8');  // left
+    interactiveSlots.add('3_9');  // down
+    interactiveSlots.add('3_10'); // right
+    interactiveSlots.add('3_11'); // enter
+    interactiveSlots.add('0_11'); // backspace
+
+    // Rows 0-2: regular keys (skip interactive slots)
+    for (let row = 0; row < 3; row++) {
+      const rowOffset = row * 0.015;
       for (let col = 0; col < 12; col++) {
-        if (row === 2 && col === 11) continue;
+        if (interactiveSlots.has(`${row}_${col}`)) continue;
+        const x = kbStartX + rowOffset + col * keySpX;
+        const z = kbStartZ + row * keySpZ;
         const key = new THREE.Mesh(keyGeo, keyMat);
-        key.position.set(-0.46 + col * 0.085, 0.055, 0.38 + row * 0.09);
+        key.position.set(x, 0.055, z);
         this.group.add(key);
-        if (row === 3 && col >= 3 && col <= 8) {
-          if (col !== 5) continue;
-          key.scale.set(6, 1, 1);
-          key.position.x = -0.46 + 5.5 * 0.085;
-        }
       }
     }
 
-    // ── Interactive keys with hitboxes ──
-    const makeKeyHit = (x, z, action, label, w = 0.1, d = 0.1, color = 0x9a9280) => {
-      const mat = createMaterial(color, 0.5, 0.15);
+    // Row 3: spacebar (cols 3-7) + filler (cols 0-2)
+    const row3Z = kbStartZ + 3 * keySpZ;
+    for (let col = 0; col < 12; col++) {
+      if (interactiveSlots.has(`3_${col}`)) continue;
+      const x = kbStartX + 3 * 0.015 + col * keySpX;
+      if (col >= 3 && col <= 7) {
+        if (col === 5) {
+          const space = new THREE.Mesh(keyGeo, keyMat);
+          space.scale.set(5, 1, 1);
+          space.position.set(kbStartX + 5 * keySpX, 0.055, row3Z);
+          this.group.add(space);
+        }
+        continue;
+      }
+      const key = new THREE.Mesh(keyGeo, keyMat);
+      key.position.set(x, 0.055, row3Z);
+      this.group.add(key);
+    }
+
+    // ── Interactive keys (on the grid) ──
+    this._glowKeys = [];
+
+    const makeKeyHit = (row, col, action, label, w = 0.07, d = 0.07, color = 0x9a9280, glow = false) => {
+      const rowOffset = row * 0.015;
+      const x = kbStartX + rowOffset + col * keySpX;
+      const z = kbStartZ + row * keySpZ;
+      const mat = glow ? createGlowMaterial(color, 0.3) : createMaterial(color, 0.5, 0.15);
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, 0.03, d), mat);
-      mesh.position.set(x, 0.06, z);
+      mesh.position.set(x, 0.055, z);
       this.group.add(mesh);
 
       const hit = new THREE.Mesh(
-        new THREE.BoxGeometry(w + 0.03, 0.1, d + 0.03),
+        new THREE.BoxGeometry(w + 0.02, 0.08, d + 0.02),
         new THREE.MeshBasicMaterial({ visible: false }),
       );
       hit.position.copy(mesh.position);
       hit.userData = { interactable: true, action, label };
       this.group.add(hit);
       this._keyboardHits.push(hit);
+      if (glow) this._glowKeys.push(mesh);
       return mesh;
     };
 
-    // Arrow Up
-    makeKeyHit(0.32, 0.56, 'key_up', '▲ Haut');
-    // Arrow Down
-    makeKeyHit(0.32, 0.68, 'key_down', '▼ Bas');
-    // Arrow Left
-    makeKeyHit(0.22, 0.68, 'key_left', '◄ Gauche');
-    // Arrow Right
-    makeKeyHit(0.42, 0.68, 'key_right', '► Droite');
-    // Enter (big red key)
-    makeKeyHit(0.50, 0.52, 'key_enter', '[Entrée] ✓', 0.12, 0.16, 0xcc5544);
-    // Backspace
-    makeKeyHit(0.50, 0.38, 'key_back', '[Retour] ←', 0.12, 0.08, 0x888877);
+    // Arrow up: row 2 col 9
+    makeKeyHit(2, 9, 'key_up', '▲ Haut', 0.065, 0.065, 0x44aa66, true);
+    // Arrow left: row 3 col 8
+    makeKeyHit(3, 8, 'key_left', '◄ Gauche', 0.065, 0.065, 0x44aa66, true);
+    // Arrow down: row 3 col 9
+    makeKeyHit(3, 9, 'key_down', '▼ Bas', 0.065, 0.065, 0x44aa66, true);
+    // Arrow right: row 3 col 10
+    makeKeyHit(3, 10, 'key_right', '► Droite', 0.065, 0.065, 0x44aa66, true);
+    // Enter: row 3 col 11
+    makeKeyHit(3, 11, 'key_enter', '[Entrée] ✓', 0.08, 0.065, 0xcc5544, true);
+    // Backspace: row 0 col 11
+    makeKeyHit(0, 11, 'key_back', '[Retour] ←', 0.08, 0.065, 0x888877, false);
 
     // ── Side vents ──
     for (const x of [-bodyW / 2 - 0.01, bodyW / 2 + 0.01]) {
@@ -488,6 +529,14 @@ export class CRTTerminal {
     this._scanOffset = (this._scanOffset + dt * 60) % 600;
     this.screenLight.color.lerp(this._targetLightColor, dt * 5);
     this.screenLight.intensity = 1.0 + Math.random() * 0.15;
+
+    // Glow keys pulse during menu
+    if (this._glowKeys && (this._menuMode === 'main' || this._menuMode === 'settings' || this._menuMode === 'ingame')) {
+      const pulse = 0.3 + Math.sin(t * 1.5) * 0.3;
+      for (const key of this._glowKeys) {
+        key.material.emissiveIntensity = pulse;
+      }
+    }
 
     // Re-render main menu for blinking cursor effect
     if (this._menuMode === 'main') {

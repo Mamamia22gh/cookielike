@@ -55,8 +55,8 @@ class App {
     // Menu state
     this._inMenu = true;
     this._audioStarted = false;
-    this.factory.camera.position.set(0.6, 1.35, -2.2);
-    this.factory.camera.rotation.set(-0.12, 0.25, 0);
+    this.factory.camera.position.set(0.4, 1.55, -2.2);
+    this.factory.camera.rotation.set(-0.18, 0.25, 0);
 
     // Wire up CRT terminal menu callback
     this.factory.terminal.setActionCallback((action) => {
@@ -124,6 +124,8 @@ class App {
     controls.addEventListener('unlock', () => {
       if (!this._inMenu && lockOverlay) lockOverlay.classList.remove('hidden');
     });
+
+
   }
 
   _startFirstPerson() {
@@ -144,7 +146,7 @@ class App {
         return;
       }
       const ease = 1 - Math.pow(1 - t, 3);
-      this.factory.camera.position.lerpVectors(new THREE.Vector3(0.6, 1.35, -2.2), targetPos, ease);
+      this.factory.camera.position.lerpVectors(new THREE.Vector3(0.6, 1.35, -1.6), targetPos, ease);
       this.factory.camera.rotation.x = startRotX * (1 - ease);
       this.factory.camera.rotation.y = startRotY * (1 - ease);
       requestAnimationFrame(anim);
