@@ -225,31 +225,19 @@ function renderOven(run, i) {
   const total = run.boxSize * BALANCE.BOX_WIDTH;
   const ci = oven.cookieIndex;
   const p = Math.min(1, oven.progress);
-  const pct = Math.round(p * 100);
 
   statusEl.textContent = `Cookie ${Math.min(ci + 1, total)}/${total}`;
 
-  // Zone info
-  let zoneLabel = '--', zoneClass = '';
-  if (p < 0.30) { zoneLabel = 'CRU'; zoneClass = 'zone-raw'; }
-  else if (p < 0.70) { zoneLabel = 'CUIT'; zoneClass = 'zone-cuit'; }
-  else if (p < 0.85) { zoneLabel = 'PARFAIT'; zoneClass = 'zone-perfect'; }
-  else { zoneLabel = 'BRÛLÉ'; zoneClass = 'zone-burned'; }
+  // Zone for current cookie — drives the glow
+  let zoneLabel = '', zoneClass = '';
+  if (ci < total) {
+    if (p < 0.30) { zoneLabel = 'CRU'; zoneClass = 'zone-raw'; }
+    else if (p < 0.70) { zoneLabel = 'CUIT'; zoneClass = 'zone-cuit'; }
+    else if (p < 0.85) { zoneLabel = 'PARFAIT'; zoneClass = 'zone-perfect'; }
+    else { zoneLabel = 'BRÛLÉ'; zoneClass = 'zone-burned'; }
+  }
 
-  // Bar color
-  let barClass = 'gold-bg';
-  if (p >= 0.85) barClass = 'red-bg';
-  else if (p >= 0.70) barClass = 'green-bg';
-  else if (p >= 0.30) barClass = 'yellow-bg';
-  else barClass = 'blue-bg';
-
-  let html = `
-    <div class="cooking-row">
-      <div class="bar" style="flex:1"><div class="bar-fill ${barClass}" style="width:${pct}%"></div></div>
-      <span style="min-width:35px;text-align:right">${pct}%</span>
-      <span class="cooking-zone ${zoneClass}">${zoneLabel}</span>
-    </div>
-    <div class="cookie-grid">`;
+  let html = '<div class="cookie-grid">';
 
   // Grid: iterate row-first for display, but data is col-first
   for (let row = 0; row < run.boxSize; row++) {
@@ -262,16 +250,20 @@ function renderOven(run, i) {
       let content = '';
 
       if (idx < ci) {
-        // Cooked
+        // Done — residual glow by zone
         const zc = ZONE_CLASS[cookie.cookingZone] || 'cuit';
         cls += ` cell-${zc}`;
         content = recipe.emoji;
       } else if (idx === ci) {
-        // Currently cooking
-        cls += ' cell-cooking';
+        // Currently cooking — GLOW changes color
+        let cookZone = 'cook-raw';
+        if (p >= 0.85) cookZone = 'cook-burned';
+        else if (p >= 0.70) cookZone = 'cook-perfect';
+        else if (p >= 0.30) cookZone = 'cook-cuit';
+        cls += ` cell-cooking ${cookZone}`;
         content = recipe.emoji;
       } else {
-        // Pending
+        // Pending — dark slot
         cls += ' cell-pending';
         content = recipe.emoji;
       }
@@ -280,7 +272,14 @@ function renderOven(run, i) {
     }
   }
 
-  html += `</div>
+  html += '</div>';
+
+  // Zone indicator light below grid
+  if (ci < total) {
+    html += `<div class="zone-light ${zoneClass}">${zoneLabel}</div>`;
+  }
+
+  html += `
     <div class="extract-btn-row">
       <button class="btn btn-gold" onclick="window._extract(${i})">⬆️ Extract <kbd>${i + 1}</kbd></button>
     </div>`;
