@@ -138,7 +138,7 @@ export class MusicSystem {
 
     // Fade in
     this._masterGain.gain.setValueAtTime(0, this._ctx.currentTime);
-    this._masterGain.gain.linearRampToValueAtTime(0.4, this._ctx.currentTime + 3);
+    this._masterGain.gain.linearRampToValueAtTime(0.75, this._ctx.currentTime + 3);
 
     this._startDrone();
     this._updatePad();

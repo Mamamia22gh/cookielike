@@ -265,7 +265,7 @@ export class GameLoop {
     });
 
     if (complete) {
-      return this.#completeBox(run, result.box, ovenIndex);
+      this.#evaluateBox(run, result.box, ovenIndex);
     }
 
     return null;
@@ -273,7 +273,6 @@ export class GameLoop {
 
   /** @deprecated Use extractCookie(ovenIndex, col, row) instead. */
   extractFromOven(ovenIndex) {
-    // Legacy compat: extract the first non-done cookie
     const run = this.state.run;
     const oven = run?.ovens?.[ovenIndex];
     if (!oven?.box || !oven.cookieStates) return null;
@@ -289,6 +288,60 @@ export class GameLoop {
     return null;
   }
 
+  /**
+   * Collect the completed tray from an oven. Player now holds it.
+   */
+  collectBox(ovenIndex) {
+    if (this.state.phase !== PHASE.PRODUCTION) {
+      return this.#error('Can only collect during PRODUCTION');
+    }
+    const run = this.state.run;
+    if (run.heldBox) {
+      this.events.emit('error', { message: 'Déjà un plateau en main' });
+      return false;
+    }
+
+    const box = this.oven.collectBox(run, ovenIndex);
+    if (!box) return false;
+
+    run.heldBox = box;
+    this.events.emit('box:collected', { box, ovenIndex });
+    return true;
+  }
+
+  /**
+   * Deposit the held tray into a packaging box. Scores and adds to benne.
+   */
+  depositBox() {
+    if (this.state.phase !== PHASE.PRODUCTION) {
+      return this.#error('Can only deposit during PRODUCTION');
+    }
+    const run = this.state.run;
+    if (!run.heldBox) {
+      this.events.emit('error', { message: 'Rien en main' });
+      return false;
+    }
+
+    const box = run.heldBox;
+    run.heldBox = null;
+
+    // Score with artifact modifiers
+    const mods = this.#getMods();
+    box.value = this.box.score(box, mods);
+
+    // Fever boost
+    if (run.fever.active) {
+      box.value = Math.floor(box.value * BALANCE.FEVER_MULTIPLIER);
+    }
+
+    // Add to benne
+    this.benne.addBox(run, box);
+    run.roundBoxes.push(box);
+
+    this.events.emit('box:scored', { box, value: box.value });
+    return true;
+  }
+
   armTopping(toppingId) {
     if (this.state.phase !== PHASE.PRODUCTION) {
       return this.#error('Can only arm topping during PRODUCTION');
@@ -300,6 +353,17 @@ export class GameLoop {
     if (this.state.phase !== PHASE.PRODUCTION) return false;
     this.#endRound();
     return true;
+  }
+
+  startOven(ovenIndex) {
+    if (this.state.phase !== PHASE.PRODUCTION) {
+      return this.#error('Can only start oven during PRODUCTION');
+    }
+    const ok = this.oven.startCooking(this.state.run, ovenIndex);
+    if (ok) {
+      this.events.emit('oven:cooking_started', { ovenIndex });
+    }
+    return ok;
   }
 
   // ─── Player Actions (Results → Choice → Shop) ───
@@ -402,7 +466,23 @@ export class GameLoop {
   // ─── Internal ───
 
   /**
+   * Evaluate a completed box's grid patterns (but don't score or deposit).
+   */
+  #evaluateBox(run, box, ovenIndex) {
+    box.gridResult = this.combo.evaluateGrid(box.grid);
+    box.comboResult = box.gridResult.bestGroup;
+
+    // Apply topping
+    if (run.armedTopping) {
+      this.topping.apply(run, box);
+    }
+
+    this.events.emit('box:ready', { box, ovenIndex });
+  }
+
+  /**
    * Score a completed box: evaluate column combos, apply topping, add to benne.
+   * Used for auto-burned boxes (from oven update).
    */
   #completeBox(run, box, ovenIndex) {
     const mods = this.#getMods();

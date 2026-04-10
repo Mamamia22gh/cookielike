@@ -26,67 +26,107 @@ export class OvenModel {
 
   _build() {
     const colors = OVEN_COLORS[this.typeId] || OVEN_COLORS.classic;
+    const bodyW = 2.5, bodyH = 2.2, bodyD = 2.0;
 
-    // Oven body
-    const bodyGeo = new THREE.BoxGeometry(2.5, 2.2, 2);
+    // ── Open-front oven body (5 panels, no front face) ──
     const bodyMat = createMaterial(colors.body, 0.4, 0.5);
-    const body = new THREE.Mesh(bodyGeo, bodyMat);
-    body.position.y = 1.1;
-    body.castShadow = true;
-    body.receiveShadow = true;
-    this.group.add(body);
-    this.body = body;
 
-    // Door (glass, semi-transparent)
-    const doorGeo = new THREE.BoxGeometry(2.0, 1.5, 0.15);
+    // Back wall
+    const back = new THREE.Mesh(new THREE.BoxGeometry(bodyW, bodyH, 0.15), bodyMat);
+    back.position.set(0, bodyH / 2, -bodyD / 2 + 0.075);
+    back.castShadow = true;
+    this.group.add(back);
+
+    // Top
+    const top = new THREE.Mesh(new THREE.BoxGeometry(bodyW, 0.15, bodyD), bodyMat);
+    top.position.set(0, bodyH, 0);
+    top.castShadow = true;
+    this.group.add(top);
+
+    // Bottom
+    const bottom = new THREE.Mesh(new THREE.BoxGeometry(bodyW, 0.15, bodyD), bodyMat);
+    bottom.position.set(0, 0.075, 0);
+    bottom.receiveShadow = true;
+    this.group.add(bottom);
+
+    // Left wall
+    const left = new THREE.Mesh(new THREE.BoxGeometry(0.15, bodyH, bodyD), bodyMat);
+    left.position.set(-bodyW / 2 + 0.075, bodyH / 2, 0);
+    left.castShadow = true;
+    this.group.add(left);
+
+    // Right wall
+    const right = new THREE.Mesh(new THREE.BoxGeometry(0.15, bodyH, bodyD), bodyMat);
+    right.position.set(bodyW / 2 - 0.075, bodyH / 2, 0);
+    right.castShadow = true;
+    this.group.add(right);
+
+    // Interior back — darker for depth
+    const interiorMat = createMaterial(0x222222, 0.8, 0.1);
+    const interiorBack = new THREE.Mesh(new THREE.BoxGeometry(bodyW - 0.3, bodyH - 0.3, 0.05), interiorMat);
+    interiorBack.position.set(0, bodyH / 2, -bodyD / 2 + 0.2);
+    this.group.add(interiorBack);
+
+    // Shake reference (use back wall as body proxy)
+    this.body = back;
+
+    // ── Door pivot at bottom edge (drops down like real oven) ──
+    this._doorPivot = new THREE.Group();
+    this._doorPivot.position.set(0, 0.15, bodyD / 2); // bottom front edge
+    this.group.add(this._doorPivot);
+
+    // Door glass (offset so pivot is at bottom)
+    const doorGeo = new THREE.BoxGeometry(bodyW - 0.2, bodyH - 0.3, 0.1);
     const doorMat = new THREE.MeshPhysicalMaterial({
-      color: colors.door,
+      color: 0x111111,
       transparent: true,
-      opacity: 0.35,
-      roughness: 0.1,
-      metalness: 0.3,
-      transmission: 0.3,
+      opacity: 0.45,
+      roughness: 0.05,
+      metalness: 0.1,
+      transmission: 0.5,
+      thickness: 0.1,
     });
-    const door = new THREE.Mesh(doorGeo, doorMat);
-    door.position.set(0, 1.2, 1.08);
-    door.castShadow = true;
-    this.group.add(door);
-    this.door = door;
+    this.door = new THREE.Mesh(doorGeo, doorMat);
+    this.door.position.set(0, (bodyH - 0.3) / 2, 0); // centered relative to pivot
+    this._doorPivot.add(this.door);
 
-    // Interior glow light
-    this.glowLight = new THREE.PointLight(0xff6600, 0, 4);
-    this.glowLight.position.set(0, 1.2, 0);
-    this.group.add(this.glowLight);
-
-    // Handle
+    // Handle (attached to door, at the top)
     const handleGeo = new THREE.CylinderGeometry(0.05, 0.05, 1.2, 8);
     const handleMat = createMaterial(PALETTE.metalDark, 0.2, 0.9);
     const handle = new THREE.Mesh(handleGeo, handleMat);
     handle.rotation.z = Math.PI / 2;
-    handle.position.set(0, 1.9, 1.2);
+    handle.position.set(0, bodyH - 0.45, 0.12);
     handle.castShadow = true;
-    this.group.add(handle);
+    this._doorPivot.add(handle);
 
-    // Type indicator
+    // Interior glow light
+    this.glowLight = new THREE.PointLight(0xff6600, 0, 4);
+    this.glowLight.position.set(0, bodyH / 2, 0);
+    this.glowLight.castShadow = true;
+    this.glowLight.shadow.bias = -0.002;
+    this.group.add(this.glowLight);
+
+    // Type indicator (top-left)
     const indicatorGeo = new THREE.SphereGeometry(0.15, 8, 8);
     const indicatorMat = createMaterial(colors.accent, 0.2, 0.4);
     indicatorMat.emissive = new THREE.Color(colors.accent);
     indicatorMat.emissiveIntensity = 0.4;
     const indicator = new THREE.Mesh(indicatorGeo, indicatorMat);
-    indicator.position.set(1.0, 2.35, 1.15);
+    indicator.position.set(-1.0, bodyH + 0.08, 0.8);
     this.group.add(indicator);
+    this._indicator = indicator;
 
     // Chimney
     const chimneyGeo = new THREE.CylinderGeometry(0.2, 0.25, 0.8, 8);
     const chimneyMat = createMaterial(colors.body, 0.5, 0.4);
     const chimney = new THREE.Mesh(chimneyGeo, chimneyMat);
-    chimney.position.set(0.6, 2.6, -0.4);
+    chimney.position.set(0.6, bodyH + 0.4, -0.4);
     chimney.castShadow = true;
     this.group.add(chimney);
 
-    // Baking tray (extends from front)
+    // ── Baking tray (inside the oven) ──
     this.tray = new THREE.Group();
-    this.tray.position.set(0, 0.95, 1.4);
+    this.tray.position.set(0, 0.5, 0);
     this.group.add(this.tray);
 
     const trayGeo = new THREE.BoxGeometry(2.0, 0.06, 1.6);
@@ -113,17 +153,45 @@ export class OvenModel {
     this.cookieContainer.position.y = 0.1;
     this.tray.add(this.cookieContainer);
 
-    // Click zone (invisible hitbox for generic interaction — fallback)
-    const hitGeo = new THREE.BoxGeometry(2.6, 2.5, 2.2);
-    const hitMat = new THREE.MeshBasicMaterial({ visible: false });
-    this.clickZone = new THREE.Mesh(hitGeo, hitMat);
-    this.clickZone.position.y = 1.2;
-    this.group.add(this.clickZone);
+    // Door open/close state
+    this._doorOpen = 0; // 0 = closed, 1 = open
+    this._doorTarget = 0;
+
+    // Grab tray hitbox (visible only when door open + completed)
+    const grabGeo = new THREE.BoxGeometry(2.0, 0.5, 1.5);
+    const grabMat = new THREE.MeshBasicMaterial({ visible: false });
+    this._grabHit = new THREE.Mesh(grabGeo, grabMat);
+    this._grabHit.position.set(0, 0.6, 0.5);
+    this._grabHit.userData = {
+      interactable: false,
+      action: 'grab_tray',
+      ovenIndex: this.index,
+      label: '[Click] Prendre le plateau',
+    };
+    this.group.add(this._grabHit);
+
+    // Door click hitbox (visible only when completed + door closed)
+    const doorHitGeo = new THREE.BoxGeometry(bodyW - 0.1, bodyH - 0.2, 0.3);
+    const doorHitMat = new THREE.MeshBasicMaterial({ visible: false });
+    this._doorHit = new THREE.Mesh(doorHitGeo, doorHitMat);
+    this._doorHit.position.set(0, bodyH / 2, bodyD / 2 + 0.1);
+    this._doorHit.userData = {
+      interactable: false,
+      action: 'open_oven_door',
+      ovenIndex: this.index,
+      label: '[Click] Ouvrir la porte',
+    };
+    this.group.add(this._doorHit);
   }
 
   loadBox(box) {
     this._box = box;
     this._clearCookies();
+
+    // LED goes green during cooking
+    this._indicator.material.color.setHex(0x22c55e);
+    this._indicator.material.emissive.setHex(0x22c55e);
+    this._indicator.material.emissiveIntensity = 0.8;
 
     if (!box.grid) return;
     const cols = box.grid.length;
@@ -145,21 +213,6 @@ export class OvenModel {
         cookie.position.set(x, 0.05, z);
         this.cookieContainer.add(cookie);
 
-        // Per-cookie hitbox
-        const hitGeo = new THREE.BoxGeometry(spacingX * 0.9, 0.35, spacingZ * 0.9);
-        const hitMat = new THREE.MeshBasicMaterial({ visible: false });
-        const hitbox = new THREE.Mesh(hitGeo, hitMat);
-        hitbox.position.set(x, 0.1, z);
-        hitbox.userData = {
-          interactable: true,
-          action: 'extract_cookie',
-          ovenIndex: this.index,
-          col,
-          row,
-          label: '',
-        };
-        this.cookieContainer.add(hitbox);
-
         // Progress ring (flat torus under cookie)
         const ringGeo = new THREE.TorusGeometry(0.12, 0.015, 4, 24);
         const ringMat = new THREE.MeshBasicMaterial({ color: ZONE_COLORS.RAW });
@@ -170,7 +223,6 @@ export class OvenModel {
 
         this._cookieModels.push({
           mesh: cookie,
-          hitbox,
           ring,
           col,
           row,
@@ -199,17 +251,14 @@ export class OvenModel {
 
       const progress = Math.min(1, cs.progress);
 
-      // Determine zone by progress thresholds
       let zone = 'RAW';
       let color = ZONE_COLORS.RAW;
       if (progress >= 0.85)      { zone = 'BURNED';  color = ZONE_COLORS.BURNED; }
       else if (progress >= 0.70) { zone = 'PERFECT'; color = ZONE_COLORS.PERFECT; }
       else if (progress >= 0.30) { zone = 'COOKED';  color = ZONE_COLORS.COOKED; }
 
-      // Ring color
       cm.ring.material.color.setHex(color);
 
-      // Cookie visual
       const mat = cm.mesh.material;
       if (zone === 'PERFECT') {
         mat.emissive = mat.emissive || new THREE.Color();
@@ -230,12 +279,6 @@ export class OvenModel {
         if (mat.emissive) mat.emissiveIntensity = 0;
         cm.mesh.scale.setScalar(1.5);
       }
-
-      // Hitbox hint label
-      const zoneLabel = zone === 'PERFECT' ? '🟢 PARFAIT' :
-        zone === 'COOKED' ? '🟡 CUIT' :
-        zone === 'BURNED' ? '🔴 BRÛLÉ' : '🔵 CRU';
-      cm.hitbox.userData.label = `[Click] ${zoneLabel} (${Math.round(progress * 100)}%)`;
     }
   }
 
@@ -247,11 +290,8 @@ export class OvenModel {
 
     const zone = cookingResult?.zone || 'COOKED';
     const color = ZONE_COLORS[zone] || 0xcccccc;
-
-    // Flash the ring
     cm.ring.material.color.setHex(color);
 
-    // Shrink and fade out
     const startScale = cm.mesh.scale.x;
     const startY = cm.mesh.position.y;
     let t = 0;
@@ -259,7 +299,6 @@ export class OvenModel {
       t += 0.05;
       if (t >= 1) {
         cm.mesh.visible = false;
-        cm.hitbox.userData.interactable = false;
         cm.ring.visible = false;
         return;
       }
@@ -289,35 +328,72 @@ export class OvenModel {
     }
     cm.mesh.scale.setScalar(1.1);
     cm.ring.material.color.setHex(ZONE_COLORS.BURNED);
-    cm.hitbox.userData.interactable = false;
-    cm.hitbox.userData.label = '💀 Brûlé';
     this._shakeAmount = 0.3;
   }
 
-  /** Box fully completed — clear all cookies, flash door. */
+  /** Mark box as ready — show door hitbox. */
+  showReady() {
+    this._doorHit.userData.interactable = true;
+  }
+
+  /** Open the door with animation (drops down). */
+  openDoor() {
+    this._doorTarget = 1;
+    this._doorHit.userData.interactable = false;
+    setTimeout(() => {
+      this._grabHit.userData.interactable = true;
+    }, 500);
+  }
+
+  /** Tray grabbed — hide tray + cookies, close door. */
+  trayGrabbed() {
+    this._grabHit.userData.interactable = false;
+    this.tray.visible = false;
+    setTimeout(() => {
+      this._doorTarget = 0;
+    }, 300);
+  }
+
+  /** Box fully completed — clear all cookies, reset door. */
   boxComplete() {
     this._clearCookies();
     this.glowLight.intensity = 0;
     this._box = null;
+    this.tray.visible = true;
+    this._doorTarget = 0;
+    this._doorOpen = 0;
+    this._doorPivot.rotation.x = 0;
+    this._grabHit.userData.interactable = false;
+    this._doorHit.userData.interactable = false;
+
+    // LED back to accent color
+    this._indicator.material.emissiveIntensity = 0.4;
 
     // Flash animation
     if (this.door.material) {
-      const origOpacity = this.door.material.opacity;
       this.door.material.emissive = new THREE.Color(0x22c55e);
       this.door.material.emissiveIntensity = 0.8;
       setTimeout(() => {
         this.door.material.emissive = new THREE.Color(0x000000);
         this.door.material.emissiveIntensity = 0;
-        this.door.material.opacity = origOpacity;
       }, 400);
     }
   }
 
-  /** Get all active cookie hitboxes for raycasting. */
+  /** Set indicator LED: green (active) or red (inactive). */
+  setIndicator(active) {
+    const color = active ? 0x22c55e : 0xef4444;
+    this._indicator.material.color.setHex(color);
+    this._indicator.material.emissive.setHex(color);
+    this._indicator.material.emissiveIntensity = active ? 0.4 : 0.6;
+  }
+
+  /** Get all active hitboxes for raycasting. */
   getCookieHitboxes() {
-    return this._cookieModels
-      .filter(cm => !cm.done && cm.hitbox.userData.interactable)
-      .map(cm => cm.hitbox);
+    const list = [];
+    if (this._doorHit.userData.interactable) list.push(this._doorHit);
+    if (this._grabHit.userData.interactable) list.push(this._grabHit);
+    return list;
   }
 
   _clearCookies() {
@@ -338,5 +414,20 @@ export class OvenModel {
       this.body.position.x = 0;
       this.body.position.z = 0;
     }
+
+    // Glow light flicker when cooking
+    const anyCooking = this._cookieModels.some(c => !c.done);
+    if (anyCooking) {
+      this.glowLight.intensity = 1.0 + Math.random() * 0.8;
+    }
+
+    // Door drop-down animation (pivot at bottom, rotates around X)
+    if (this._doorOpen < this._doorTarget) {
+      this._doorOpen = Math.min(this._doorTarget, this._doorOpen + dt * 2.0);
+    } else if (this._doorOpen > this._doorTarget) {
+      this._doorOpen = Math.max(this._doorTarget, this._doorOpen - dt * 2.0);
+    }
+    // Rotate around X: 0 = closed (vertical), π/2 = open (horizontal, dropped down)
+    this._doorPivot.rotation.x = this._doorOpen * Math.PI * 0.45;
   }
 }

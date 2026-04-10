@@ -36,7 +36,9 @@ export class OvenScreen {
     this._texture.minFilter = THREE.LinearFilter;
 
     this._cookieHitboxes = [];
+    this._startButton = null;
     this._cookieStates = null;
+    this._cooking = false;
     this._gridCols = 0;
     this._gridRows = 0;
     this._box = null;
@@ -45,15 +47,15 @@ export class OvenScreen {
   }
 
   _build() {
-    // Monitor stand
+    // Wall mount bracket (replaces floor stand)
     const standMat = createMaterial(PALETTE.metalDark, 0.3, 0.8);
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.0, 6), standMat);
-    pole.position.y = 0.5;
-    this.group.add(pole);
+    const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.5), standMat);
+    bracket.position.set(-0.5, 1.7, -0.25);
+    this.group.add(bracket);
 
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.3, 0.06, 8), standMat);
-    base.position.y = 0.03;
-    this.group.add(base);
+    const vertBar = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.0, 0.08), standMat);
+    vertBar.position.set(-0.5, 1.2, -0.48);
+    this.group.add(vertBar);
 
     // Screen frame
     const frameMat = createMaterial(0x222233, 0.3, 0.6);
@@ -77,8 +79,20 @@ export class OvenScreen {
     led.position.set(0.45, 1.05, 0.05);
     this.group.add(led);
 
-    // Tilt slightly toward player
-    this.group.rotation.x = -0.15;
+    // Stand upright (no tilt)
+
+    // START button hitbox (hidden until box loaded, hidden once cooking)
+    const startHitGeo = new THREE.BoxGeometry(0.8, 0.35, 0.15);
+    const startHitMat = new THREE.MeshBasicMaterial({ visible: false });
+    this._startButton = new THREE.Mesh(startHitGeo, startHitMat);
+    this._startButton.position.set(0, 1.2, 0.1);
+    this._startButton.userData = {
+      interactable: false,
+      action: 'start_oven',
+      ovenIndex: this.ovenIndex,
+      label: '[Click] ▶ Démarrer la cuisson',
+    };
+    this.group.add(this._startButton);
 
     this._drawIdle();
   }
@@ -94,22 +108,57 @@ export class OvenScreen {
     this._texture.needsUpdate = true;
   }
 
-  /** Load a box and create per-cookie hitboxes in front of the screen. */
+  _drawWaitingForStart() {
+    const ctx = this._ctx;
+    ctx.fillStyle = '#0a0a1a';
+    ctx.fillRect(0, 0, 400, 500);
+    ctx.font = 'bold 32px monospace';
+    ctx.fillStyle = '#22c55e';
+    ctx.textAlign = 'center';
+    ctx.fillText('COOKIES CHARGÉS', 200, 180);
+    ctx.font = 'bold 40px monospace';
+    ctx.fillText('▶ DÉMARRER', 200, 300);
+    ctx.font = '20px monospace';
+    ctx.fillStyle = '#666';
+    ctx.fillText('Cliquez pour cuire', 200, 380);
+    this._texture.needsUpdate = true;
+  }
+
+  /** Load a box — shows START button, does NOT create cookie hitboxes yet. */
   loadBox(box) {
     this._box = box;
+    this._cooking = false;
     this._clearHitboxes();
 
     if (!box?.grid) return;
     this._gridCols = box.grid.length;
     this._gridRows = box.grid[0]?.length ?? 5;
 
-    const cellW = 0.9 / this._gridCols;
-    const cellH = 1.1 / this._gridRows;
+    // Show START button
+    this._startButton.userData.interactable = true;
+    this._drawWaitingForStart();
+  }
+
+  /** Called when player clicks START — create cookie hitboxes and begin tracking. */
+  startCooking() {
+    this._cooking = true;
+    this._startButton.userData.interactable = false;
+    this._createCookieHitboxes();
+  }
+
+  _createCookieHitboxes() {
+    this._clearHitboxes();
+    if (!this._box?.grid) return;
+
+    const cols = this._gridCols;
+    const rows = this._gridRows;
+    const cellW = 0.9 / cols;
+    const cellH = 1.1 / rows;
     const startX = -0.45 + cellW / 2;
     const startY = 2.25 - cellH / 2;
 
-    for (let col = 0; col < this._gridCols; col++) {
-      for (let row = 0; row < this._gridRows; row++) {
+    for (let col = 0; col < cols; col++) {
+      for (let row = 0; row < rows; row++) {
         const x = startX + col * cellW;
         const y = startY - row * cellH;
 
@@ -134,6 +183,7 @@ export class OvenScreen {
   /** Update visual state from cookieStates array. */
   setCookieStates(cookieStates) {
     this._cookieStates = cookieStates;
+    if (!this._cooking) return; // don't render grid before cooking starts
     this._render();
 
     // Update hitbox labels
@@ -186,14 +236,23 @@ export class OvenScreen {
     this._clearHitboxes();
     this._box = null;
     this._cookieStates = null;
+    this._cooking = false;
+    this._startButton.userData.interactable = false;
     this._drawIdle();
   }
 
-  /** Get active hitboxes for raycasting. */
+  /** Get active hitboxes for raycasting (includes START button). */
   getHitboxes() {
-    return this._cookieHitboxes
-      .filter(ch => !ch.done && ch.hitbox.userData.interactable)
-      .map(ch => ch.hitbox);
+    const list = [];
+    if (this._startButton.userData.interactable) {
+      list.push(this._startButton);
+    }
+    for (const ch of this._cookieHitboxes) {
+      if (!ch.done && ch.hitbox.userData.interactable) {
+        list.push(ch.hitbox);
+      }
+    }
+    return list;
   }
 
   _clearHitboxes() {
@@ -314,6 +373,6 @@ export class OvenScreen {
 
   update(dt) {
     // Re-render if active
-    if (this._cookieStates) this._render();
+    if (this._cooking && this._cookieStates) this._render();
   }
 }

@@ -27,7 +27,7 @@ export const BALANCE = Object.freeze({
   INITIAL_OVENS: ['classic'],
 
   // Limits
-  MAX_OVENS: 3,
+  MAX_OVENS: 1,
   MAX_POOL_TYPES: 8,
   BENNE_CAPACITY: 20,
   MAX_COPIES_PER_RECIPE: 4,

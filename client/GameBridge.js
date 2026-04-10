@@ -15,13 +15,22 @@ export class GameBridge {
     this._choices = [];
 
     // ── Wire up sound callbacks on the slot machine ──
-    this.factory.slotMachine.onTick = () => this.audio.play('tick');
-    this.factory.slotMachine.onLock = () => this.audio.play('lock');
-    this.factory.slotMachine.onCraftStart = () => this.audio.play('craft');
-    this.factory.slotMachine.onCraftDone = () => this.audio.play('score');
+    this.factory.slotMachine.onTick = () => this.audio.playAt('tick', this._machinePos());
+    this.factory.slotMachine.onLock = () => this.audio.playAt('lock', this._machinePos());
+    this.factory.slotMachine.onCraftStart = () => this.audio.playAt('craft', this._machinePos());
+    this.factory.slotMachine.onCraftDone = () => this.audio.playAt('score', this._machinePos());
 
     this._bindEvents();
     this.factory.setPhase('IDLE');
+  }
+
+  /** Get slot machine world position for positional audio. */
+  _machinePos() { return this.factory.slotMachine.group.position; }
+
+  /** Get oven world position. */
+  _ovenPos(ovenIndex) {
+    const oven = this.factory.ovens[ovenIndex];
+    return oven ? oven.group.position : this._machinePos();
   }
 
   /* ── Interaction from 3D raycaster ── */
@@ -35,6 +44,23 @@ export class GameBridge {
         this.audio.play('click');
         g.startRun();
         break;
+
+      case 'radio_next':
+        this.audio.play('click');
+        this.factory.radio.nextTrack();
+        this.hud.addMessage('📻 Chanson suivante');
+        break;
+
+      case 'key_up':
+      case 'key_down':
+      case 'key_enter':
+      case 'key_back':
+      case 'key_left':
+      case 'key_right':
+        this.audio.play('click');
+        this.factory.terminal.handleKey(data.action);
+        break;
+
       case 'start_round':
         if (phase === 'PREVIEW') { this.audio.play('click'); this.startRound(); }
         break;
@@ -48,7 +74,7 @@ export class GameBridge {
 
       case 'pour_dough':
         if (phase === 'PRODUCTION') {
-          this.audio.play('click');
+          this.audio.playAt('click', this._machinePos());
           this.factory.doughProvider.pour();
           this.hud.addMessage('🧈 Pâte versée');
         }
@@ -63,11 +89,46 @@ export class GameBridge {
         }
         break;
 
+      case 'start_oven':
+        if (phase === 'PRODUCTION') {
+          if (g.startOven(data.ovenIndex)) {
+            this.factory.ovenScreens[data.ovenIndex]?.startCooking();
+          }
+        }
+        break;
+
+      case 'open_oven_door':
+        if (phase === 'PRODUCTION') {
+          this.audio.playAt('click', this._ovenPos(data.ovenIndex));
+          this.factory.ovens[data.ovenIndex]?.openDoor();
+        }
+        break;
+
+      case 'grab_tray':
+        if (phase === 'PRODUCTION') {
+          if (g.collectBox(data.ovenIndex)) {
+            this.audio.playAt('extract', this._ovenPos(data.ovenIndex));
+            this.factory.ovens[data.ovenIndex]?.trayGrabbed();
+            this.factory.ovenScreens[data.ovenIndex]?.boxComplete();
+            this.hud.addMessage('🫴 Plateau en main — allez vers la boîte');
+          }
+        }
+        break;
+
+      case 'deposit_box':
+        if (phase === 'PRODUCTION') {
+          if (g.depositBox()) {
+            this.audio.play('score');
+            this.hud.addMessage('📦 Boîte emballée !');
+          }
+        }
+        break;
+
       case 'poll_reroll':
-        if (phase === 'POLL') { this.audio.play('click'); g.pollReroll(); }
+        if (phase === 'POLL') { this.audio.playAt('click', this._machinePos()); g.pollReroll(); }
         break;
       case 'poll_confirm':
-        if (phase === 'POLL') { this.audio.play('click'); g.pollConfirm(); }
+        if (phase === 'POLL') { this.audio.playAt('click', this._machinePos()); g.pollConfirm(); }
         break;
 
       case 'choice':
@@ -85,13 +146,13 @@ export class GameBridge {
 
       case 'shop_buy':
         if (phase === 'SHOP') {
-          if (g.shopBuyArtifact(data.index)) this.audio.play('buy');
+          if (g.shopBuyArtifact(data.index)) this.audio.playAt('buy', this.factory.shopCounter.group.position);
           this._refreshShop();
         }
         break;
       case 'shop_reroll':
         if (phase === 'SHOP') {
-          this.audio.play('click');
+          this.audio.playAt('click', this.factory.shopCounter.group.position);
           g.shopReroll();
           this._refreshShop();
         }
@@ -152,21 +213,27 @@ export class GameBridge {
 
     g.on('box:created', (data) => {
       this.factory.onBoxCreated(data);
-      this.audio.play('pull');
+      this.audio.playAt('pull', this._machinePos());
       this.hud.addMessage(`📦 Box — pâte -${data.pasteCost}`);
+    });
+
+    g.on('oven:cooking_started', (data) => {
+      this.audio.playAt('oven_start', this._ovenPos(data.ovenIndex));
+      this.audio.playAt('oven_hum', this._ovenPos(data.ovenIndex));
     });
 
     g.on('oven:progress', (data) => this.factory.onOvenProgress(data));
 
     g.on('oven:cookie_done', (data) => {
       this.factory.onCookieExtracted(data);
+      const pos = this._ovenPos(data.ovenIndex);
       const zone = data.cookingResult.zone;
       if (zone === 'PERFECT' || zone === 'SWEET_SPOT') {
-        this.audio.play('perfect');
+        this.audio.playAt('perfect', pos);
       } else if (zone === 'BURNED') {
-        this.audio.play('burn');
+        this.audio.playAt('burn', pos);
       } else {
-        this.audio.play('extract');
+        this.audio.playAt('extract', pos);
       }
       if (data.rhythmStreak >= 3) {
         this.hud.addMessage(`🥁 Streak ×${data.rhythmStreak}`);
@@ -175,15 +242,20 @@ export class GameBridge {
 
     g.on('oven:cookie_burned', (data) => {
       this.factory.onCookieBurned(data);
-      this.audio.play('burn');
+      this.audio.playAt('burn', this._ovenPos(data.ovenIndex));
+    });
+
+    g.on('box:ready', (data) => {
+      const oven = this.factory.ovens[data.ovenIndex];
+      if (oven) oven.showReady();
     });
 
     g.on('box:scored', (data) => {
       this.factory.onBoxScored(data);
-      this.audio.play('score');
+      this.audio.playAt('score', this._ovenPos(data.ovenIndex));
       const combo = data.box?.gridResult?.bestGroup;
       if (combo && combo.size >= 3) {
-        this.audio.play('combo');
+        this.audio.playAt('combo', this._ovenPos(data.ovenIndex));
         this.hud.addMessage(`🎰 ${combo.name} ×${combo.multiplier} → ${data.value}🪙`);
       } else {
         this.hud.addMessage(`✅ ${data.value}🪙`);

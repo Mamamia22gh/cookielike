@@ -61,6 +61,14 @@ export class AirVent {
 
     // Subtle dust particles drifting out
     this._dustParticles = [];
+
+    // Shared geometry/material for dust (avoid per-spawn allocation)
+    this._dustGeo = new THREE.SphereGeometry(0.015, 3, 3);
+    this._dustMat = new THREE.MeshBasicMaterial({
+      color: 0xaaaaaa,
+      transparent: true,
+      opacity: 0.3,
+    });
   }
 
   /**
@@ -74,32 +82,40 @@ export class AirVent {
     // Create positional audio
     this._sound = new THREE.PositionalAudio(this._listener);
 
-    // Generate looping white noise buffer
+    // Generate a very low-frequency rumble buffer (not white noise)
     const sampleRate = audioCtx.sampleRate;
-    const duration = 2; // 2-second loop
+    const duration = 3; // longer loop = less obvious repetition
     const bufferSize = sampleRate * duration;
     const buffer = audioCtx.createBuffer(1, bufferSize, sampleRate);
     const data = buffer.getChannelData(0);
 
-    // Shaped noise: mostly low-mid frequency hissing
+    // Start with noise
     for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * 0.5;
+      data[i] = (Math.random() * 2 - 1);
     }
 
-    // Apply simple low-pass by averaging adjacent samples
-    for (let pass = 0; pass < 3; pass++) {
-      for (let i = 1; i < bufferSize - 1; i++) {
-        data[i] = (data[i - 1] + data[i] + data[i + 1]) / 3;
+    // 12 passes of wide averaging = extremely heavy low-pass
+    // This kills all mid/high frequencies, leaving only a sub-bass rumble
+    for (let pass = 0; pass < 12; pass++) {
+      for (let i = 4; i < bufferSize - 4; i++) {
+        data[i] = (data[i-4] + data[i-3] + data[i-2] + data[i-1] + data[i] + data[i+1] + data[i+2] + data[i+3] + data[i+4]) / 9;
       }
+    }
+
+    // Normalize to low amplitude
+    let max = 0;
+    for (let i = 0; i < bufferSize; i++) max = Math.max(max, Math.abs(data[i]));
+    if (max > 0) {
+      for (let i = 0; i < bufferSize; i++) data[i] = (data[i] / max) * 0.12;
     }
 
     this._sound.setBuffer(buffer);
     this._sound.setLoop(true);
-    this._sound.setVolume(0.6);
-    this._sound.setRefDistance(2);
-    this._sound.setRolloffFactor(1.5);
+    this._sound.setVolume(0.08);
+    this._sound.setRefDistance(3);
+    this._sound.setRolloffFactor(2.0);
     this._sound.setDistanceModel('exponential');
-    this._sound.setMaxDistance(20);
+    this._sound.setMaxDistance(15);
 
     this.group.add(this._sound);
     this._sound.play();
@@ -126,13 +142,9 @@ export class AirVent {
   }
 
   _spawnDust() {
-    const geo = new THREE.SphereGeometry(0.015, 3, 3);
-    const mat = new THREE.MeshBasicMaterial({
-      color: 0xaaaaaa,
-      transparent: true,
-      opacity: 0.3,
-    });
-    const mesh = new THREE.Mesh(geo, mat);
+    // Clone material (need unique opacity per particle), reuse geometry
+    const mat = this._dustMat.clone();
+    const mesh = new THREE.Mesh(this._dustGeo, mat);
     mesh.position.set(
       (Math.random() - 0.5) * 1.2,
       (Math.random() - 0.5) * 0.8,

@@ -176,6 +176,8 @@ export class SlotMachine {
     // ── Internal glow light (for crafting) ──
     this._craftLight = new THREE.PointLight(0xff6600, 0, 5);
     this._craftLight.position.set(0, 2.5, 0.5);
+    this._craftLight.castShadow = true;
+    this._craftLight.shadow.bias = -0.002;
     this.group.add(this._craftLight);
 
     // ── Decorative trims ──
@@ -470,6 +472,17 @@ export class SlotMachine {
       if (light.material && light.material.emissive && light.userData?._sideLight) {
         light.material.emissiveIntensity = 0.3 + Math.sin(t * 2 + light.position.y) * 0.15;
       }
+    }
+
+    // Light up during rolling/target select
+    if (this._state === 'rolling') {
+      this._craftLight.intensity = 1.0 + Math.sin(t * 10) * 0.5;
+      this._craftLight.color.setHex(0x3b82f6);
+    } else if (this._state === 'target_select') {
+      this._craftLight.intensity = 1.5;
+      this._craftLight.color.setHex(0xa855f7);
+    } else if (this._state === 'idle') {
+      this._craftLight.intensity = 0;
     }
 
     // ── Craft particles ──

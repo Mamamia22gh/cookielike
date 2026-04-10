@@ -22,8 +22,11 @@ export function createGame(options = {}) {
 
     // ─── Production actions ───
     pullLever:          ()                          => loop.pullLever(),
+    startOven:          (ovenIndex)                 => loop.startOven(ovenIndex),
     extractCookie:      (ovenIdx, col, row)         => loop.extractCookie(ovenIdx, col, row),
     extractFromOven:    (ovenIndex)                 => loop.extractFromOven(ovenIndex),
+    collectBox:         (ovenIndex)                 => loop.collectBox(ovenIndex),
+    depositBox:         ()                          => loop.depositBox(),
     armTopping:         (toppingId)                 => loop.armTopping(toppingId),
     endRoundEarly:      ()                          => loop.endRoundEarly(),
 

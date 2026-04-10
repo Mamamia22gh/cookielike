@@ -4,7 +4,6 @@ import { GameBridge } from './GameBridge.js';
 import { FactoryScene } from './scenes/FactoryScene.js';
 import { HUD3D } from './ui/HUD3D.js';
 import { AudioManager } from './audio/AudioManager.js';
-import { MusicSystem } from './audio/MusicSystem.js';
 import { createPostFX } from './postprocessing/PostFX.js';
 import './styles/ui.css';
 
@@ -35,7 +34,6 @@ class App {
     this.factory = new FactoryScene(this.renderer);
     this.hud = new HUD3D();
     this.audio = new AudioManager();
-    this.music = new MusicSystem();
     this.bridge = new GameBridge(this.game, this.factory, this.hud, this.audio);
 
     // Post-processing
@@ -50,26 +48,131 @@ class App {
   _setupPointerLock() {
     const lockOverlay = document.getElementById('lock-overlay');
     const controls = this.factory.controls;
-    lockOverlay.addEventListener('click', () => {
-      controls.lock();
-      // Init audio on first interaction
+    
+    // We start in MENU mode. Hide overlay if it exists.
+    if (lockOverlay) lockOverlay.classList.add('hidden');
+
+    // Menu state
+    this._inMenu = true;
+    this._audioStarted = false;
+    this.factory.camera.position.set(0.6, 1.35, -2.2);
+    this.factory.camera.rotation.set(-0.12, 0.25, 0);
+
+    // Wire up CRT terminal menu callback
+    this.factory.terminal.setActionCallback((action) => {
+      if (action === 'start_run') {
+        this._startFirstPerson();
+      } else if (action === 'start_round') {
+        this.bridge.interact({ action: 'start_round' });
+      } else if (action === 'continue_results') {
+        this.bridge.interact({ action: 'continue_results' });
+      }
+    });
+
+    // The user clicks to start the interaction
+    this.canvas.addEventListener('click', () => {
       if (!this._audioStarted) {
         this._audioStarted = true;
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        // Start music
-        this.music.init(ctx);
-        this.music.start();
-        // Start air vent hissing
+        const ctx = this.factory.listener.context;
+        this.audio.init(ctx);
+        
+        // Start radio with intro glitch
+        this.factory.radio.start(ctx, [
+          'music/chevalier_paris.mp3',
+          'music/les_amants_de_paris.mp3',
+          'music/montand_boulevards.mp3',
+          'music/tout_le_jour.mp3',
+          'music/satie_gymnopedie.mp3',
+          'music/musette_mektoub.mp3',
+          'music/la_mer.mp3',
+          'music/plus_beau_tango.mp3',
+          'music/piaf_la_vie_en_rose.mp3',
+          'music/piaf_trois_cloches.mp3',
+          'music/baker_paris_paris.mp3',
+          'music/greco_si_tu_timagines.mp3',
+        ], true);
+        
         for (const vent of this.factory.airVents) {
           vent.startSound(ctx);
         }
       }
+
+      if (this._inMenu) {
+        // If in menu, handle click via raycaster
+        const inter = this._getMenuInteractableAt();
+        if (inter) {
+          this.audio.play('click');
+          if (inter.action.startsWith('key_')) {
+            // Keyboard key pressed — forward to terminal menu
+            this.factory.terminal.handleKey(inter.action);
+          } else if (inter.action === 'radio_next') {
+            this.factory.radio.nextTrack();
+          } else if (inter.action === 'start_run') {
+            // Direct button press
+            this._startFirstPerson();
+          }
+        }
+      } else {
+        // First person mode lock check
+        if (!controls.isLocked) controls.lock();
+      }
     });
-    controls.addEventListener('lock', () => lockOverlay.classList.add('hidden'));
-    controls.addEventListener('unlock', () => lockOverlay.classList.remove('hidden'));
+
+    controls.addEventListener('lock', () => {
+      if (lockOverlay) lockOverlay.classList.add('hidden');
+    });
+    controls.addEventListener('unlock', () => {
+      if (!this._inMenu && lockOverlay) lockOverlay.classList.remove('hidden');
+    });
+  }
+
+  _startFirstPerson() {
+    this._inMenu = false;
+    this.audio.play('click');
+    // Animate camera to player position
+    const startPos = this.factory.camera.position.clone();
+    const startRotX = this.factory.camera.rotation.x;
+    const startRotY = this.factory.camera.rotation.y;
+    const targetPos = new THREE.Vector3(0, 1.7, -3.0);
+    
+    let t = 0;
+    const anim = () => {
+      t += 0.05;
+      if (t >= 1) {
+        this.factory.controls.lock();
+        this.game.startRun();
+        return;
+      }
+      const ease = 1 - Math.pow(1 - t, 3);
+      this.factory.camera.position.lerpVectors(new THREE.Vector3(0.6, 1.35, -2.2), targetPos, ease);
+      this.factory.camera.rotation.x = startRotX * (1 - ease);
+      this.factory.camera.rotation.y = startRotY * (1 - ease);
+      requestAnimationFrame(anim);
+    };
+    anim();
+  }
+
+  _getMenuInteractableAt() {
+    if (!this._mouse) return null;
+    this.factory.raycaster.setFromCamera(this._mouse, this.factory.camera);
+    // Terminal keys + buttons
+    const targets = this.factory.terminal.getInteractables();
+    // Radio hitzone
+    targets.push(this.factory.radio.hitZone);
+    for (const mesh of targets) {
+      const intersects = this.factory.raycaster.intersectObject(mesh, true);
+      if (intersects.length > 0) return mesh.userData;
+    }
+    return null;
   }
 
   _bindInputs() {
+    this._mouse = new THREE.Vector2();
+    document.addEventListener('mousemove', (e) => {
+      this._mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+      this._mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    });
+
     // ── Movement only (AZERTY + QWERTY) ──
     document.addEventListener('keydown', (e) => {
       if (!this.factory.controls.isLocked) return;

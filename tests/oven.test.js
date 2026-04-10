@@ -26,11 +26,12 @@ describe('OvenSystem', () => {
   });
 
   describe('loadBox', () => {
-    it('loads box into oven with cookieIndex 0', () => {
+    it('loads box into oven with cooking=false', () => {
       const box = makeBox();
       const result = oven.loadBox(run, 0, box);
       expect(result).toBe(true);
       expect(run.ovens[0].box).toBe(box);
+      expect(run.ovens[0].cooking).toBe(false);
       expect(run.ovens[0].cookieStates).not.toBeNull();
       expect(run.ovens[0].cookieStates.length).toBe(BALANCE.BOX_WIDTH * BALANCE.BOX_SIZE);
     });
@@ -45,19 +46,48 @@ describe('OvenSystem', () => {
       oven.loadBox(run, 0, makeBox(), rng);
       const states = run.ovens[0].cookieStates;
       const speeds = states.map(s => s.speed);
-      // Speeds should be varied
       expect(new Set(speeds).size).toBeGreaterThan(1);
       speeds.forEach(s => {
-        expect(s).toBeGreaterThanOrEqual(0.7);
-        expect(s).toBeLessThanOrEqual(1.3);
+        expect(s).toBeGreaterThanOrEqual(0.5);
+        expect(s).toBeLessThanOrEqual(1.5);
       });
     });
   });
 
+  describe('startCooking', () => {
+    it('sets cooking to true', () => {
+      oven.loadBox(run, 0, makeBox());
+      expect(oven.startCooking(run, 0)).toBe(true);
+      expect(run.ovens[0].cooking).toBe(true);
+    });
+
+    it('returns false if no box', () => {
+      expect(oven.startCooking(run, 0)).toBe(false);
+    });
+
+    it('returns false if already cooking', () => {
+      oven.loadBox(run, 0, makeBox());
+      oven.startCooking(run, 0);
+      expect(oven.startCooking(run, 0)).toBe(false);
+    });
+  });
+
   describe('update', () => {
-    it('advances progress on all cookies', () => {
+    it('does NOT advance if cooking=false', () => {
       const rng = new RNG(42);
       oven.loadBox(run, 0, makeBox(), rng);
+      // cooking is false by default
+      oven.update(run, 0.5);
+      const states = run.ovens[0].cookieStates;
+      for (const cs of states) {
+        expect(cs.progress).toBe(0);
+      }
+    });
+
+    it('advances progress after startCooking', () => {
+      const rng = new RNG(42);
+      oven.loadBox(run, 0, makeBox(), rng);
+      oven.startCooking(run, 0);
       oven.update(run, 0.5);
       const states = run.ovens[0].cookieStates;
       for (const cs of states) {
@@ -68,12 +98,15 @@ describe('OvenSystem', () => {
     it('auto-burns cookie at 100% and may complete box', () => {
       const rng = new RNG(42);
       oven.loadBox(run, 0, makeBox(), rng);
-      const evts = oven.update(run, 100); // way past burn
+      oven.startCooking(run, 0);
+      const evts = oven.update(run, 100);
       const burns = evts.filter(e => e.type === 'burn');
       expect(burns.length).toBeGreaterThan(0);
       const completes = evts.filter(e => e.type === 'complete');
       expect(completes.length).toBe(1);
-      expect(run.ovens[0].box).toBeNull();
+      // Box stays in oven (completed=true) until collected
+      expect(run.ovens[0].box).not.toBeNull();
+      expect(run.ovens[0].completed).toBe(true);
     });
   });
 
@@ -82,10 +115,18 @@ describe('OvenSystem', () => {
       expect(oven.extractCookie(run, 0, 0, 0, [])).toBeNull();
     });
 
-    it('extracts one cookie and marks it done', () => {
+    it('returns null if cooking not started', () => {
       const rng = new RNG(42);
       oven.loadBox(run, 0, makeBox(), rng);
-      run.ovens[0].cookieStates[0].progress = 0.75; // perfect zone
+      run.ovens[0].cookieStates[0].progress = 0.75;
+      expect(oven.extractCookie(run, 0, 0, 0, [])).toBeNull();
+    });
+
+    it('extracts one cookie after cooking started', () => {
+      const rng = new RNG(42);
+      oven.loadBox(run, 0, makeBox(), rng);
+      oven.startCooking(run, 0);
+      run.ovens[0].cookieStates[0].progress = 0.75;
       const result = oven.extractCookie(run, 0, 0, 0, []);
       expect(result).not.toBeNull();
       expect(result.complete).toBe(false);
@@ -96,6 +137,7 @@ describe('OvenSystem', () => {
     it('completes box after all cookies extracted', () => {
       const rng = new RNG(42);
       oven.loadBox(run, 0, makeBox(), rng);
+      oven.startCooking(run, 0);
       const total = BALANCE.BOX_WIDTH * BALANCE.BOX_SIZE;
       const rows = BALANCE.BOX_SIZE;
       let lastResult = null;
@@ -106,6 +148,12 @@ describe('OvenSystem', () => {
         lastResult = oven.extractCookie(run, 0, col, row, []);
       }
       expect(lastResult.complete).toBe(true);
+      // Box stays in oven (completed=true) until collected
+      expect(run.ovens[0].box).not.toBeNull();
+      expect(run.ovens[0].completed).toBe(true);
+      // Collect it
+      const box = oven.collectBox(run, 0);
+      expect(box).not.toBeNull();
       expect(run.ovens[0].box).toBeNull();
     });
 
@@ -113,6 +161,7 @@ describe('OvenSystem', () => {
       const rng = new RNG(42);
       const box = makeBox();
       oven.loadBox(run, 0, box, rng);
+      oven.startCooking(run, 0);
       run.ovens[0].cookieStates[0].progress = 0.75;
       oven.extractCookie(run, 0, 0, 0, []);
       expect(box.grid[0][0].cookingZone).toBe('PERFECT');
@@ -123,6 +172,7 @@ describe('OvenSystem', () => {
       const rng = new RNG(42);
       const box = makeBox();
       oven.loadBox(run, 0, box, rng);
+      oven.startCooking(run, 0);
 
       // RAW
       run.ovens[0].cookieStates[0].progress = 0.15;

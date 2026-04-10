@@ -54,6 +54,9 @@ describe('Integration: full game flow', () => {
     let scoredBox = null;
     game.on('box:scored', (d) => { scoredBox = d; });
 
+    // Start oven cooking
+    game.startOven(0);
+
     // Extract all 20 cookies at perfect timing
     const rows = BALANCE.BOX_SIZE;
     for (let ci = 0; ci < TOTAL_COOKIES; ci++) {
@@ -63,13 +66,20 @@ describe('Integration: full game flow', () => {
       const result = game.extractCookie(0, col, row);
       if (ci < TOTAL_COOKIES - 1) {
         expect(result).toBeNull(); // not complete yet
-      } else {
-        expect(result).not.toBeNull(); // box complete
-        expect(result.value).toBeGreaterThan(0);
       }
     }
 
+    // Box is completed but NOT scored yet — need to collect + deposit
+    expect(scoredBox).toBeNull();
+
+    // Collect from oven
+    expect(game.collectBox(0)).toBe(true);
+    expect(run.heldBox).not.toBeNull();
+
+    // Deposit into box station
+    expect(game.depositBox()).toBe(true);
     expect(scoredBox).not.toBeNull();
+    expect(run.heldBox).toBeNull();
   });
 
   it('full round → results → choice → shop → next round', () => {
@@ -83,6 +93,7 @@ describe('Integration: full game flow', () => {
 
     // Produce a box
     game.pullLever();
+    game.startOven(0);
     const rows = BALANCE.BOX_SIZE;
     for (let ci = 0; ci < TOTAL_COOKIES; ci++) {
       run.ovens[0].cookieStates[ci].progress = 0.75;
@@ -90,6 +101,9 @@ describe('Integration: full game flow', () => {
       const row = ci % rows;
       game.extractCookie(0, col, row);
     }
+    // Collect and deposit
+    game.collectBox(0);
+    game.depositBox();
 
     // End round — 1 box may not meet quota, that's fine
     game.endRoundEarly();
@@ -129,6 +143,7 @@ describe('Integration: full game flow', () => {
       game.startRound();
       game.pollConfirm();
       game.pullLever();
+      game.startOven(0);
       const run = game.getState().run;
       // Extract all cookies at perfect
       const rows = BALANCE.BOX_SIZE;
@@ -138,6 +153,8 @@ describe('Integration: full game flow', () => {
         const row = ci % rows;
         game.extractCookie(0, col, row);
       }
+      game.collectBox(0);
+      game.depositBox();
       const box = run.roundBoxes[0];
       return {
         grid0: box.grid[0].map(c => c.recipeId),
