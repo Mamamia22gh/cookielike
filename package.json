@@ -1,0 +1,16 @@
+{
+  "name": "cookielike",
+  "version": "0.1.0",
+  "description": "Cookie roguelike - headless game engine",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "node src/dev/DevTUI.js",
+    "simulate": "node src/dev/DevSimulator.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^3.1.1"
+  }
+}
