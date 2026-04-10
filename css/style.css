@@ -1,0 +1,145 @@
+/* ═══ Reset & Base ═══ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f0f23;--card:#1a1a3e;--border:#2d2d5e;
+  --text:#ccc;--dim:#666;--white:#eee;
+  --gold:#ffd700;--green:#22c55e;--yellow:#eab308;
+  --red:#ef4444;--blue:#3b82f6;--purple:#a855f7;--cyan:#06b6d4;
+  --cell:48px;
+}
+html{font-size:15px}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;min-height:100vh;display:flex;justify-content:center}
+#game{width:100%;max-width:680px;padding:12px}
+
+/* ═══ Screens ═══ */
+.screen{display:none;animation:fadeIn .2s}.screen.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* ═══ Typography ═══ */
+h1,h2,h3{color:var(--white);margin-bottom:8px}
+.title{font-size:2.5rem;text-align:center;margin:40px 0 8px}
+.subtitle{text-align:center;color:var(--dim);margin-bottom:32px}
+.hint{text-align:center;color:var(--dim);font-size:.8rem;margin-top:8px}
+.gold{color:var(--gold)}.red{color:var(--red)}
+.gold-glow{color:var(--gold);text-shadow:0 0 20px rgba(255,215,0,.4)}
+
+/* ═══ Cards ═══ */
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin:10px 0}
+
+/* ═══ Buttons ═══ */
+.btn{padding:8px 18px;border:1px solid var(--border);background:var(--card);color:var(--text);border-radius:8px;cursor:pointer;font-size:.95rem;transition:all .12s;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--gold);background:#222250}
+.btn:active{transform:scale(.96)}
+.btn-gold{border-color:var(--gold);color:var(--gold)}
+.btn-gold:hover{background:#2a2a10;box-shadow:0 0 12px rgba(255,215,0,.15)}
+.btn-lg{padding:14px 32px;font-size:1.1rem;display:block;margin:16px auto;width:fit-content}
+.btn[disabled]{opacity:.4;pointer-events:none}
+kbd{background:#111;padding:2px 6px;border-radius:4px;font-size:.75rem;border:1px solid #444}
+
+/* ═══ Stat rows ═══ */
+.stat-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #1a1a30}
+.stat-row.big{font-size:1.2rem;font-weight:700;padding:10px 0}
+
+/* ═══ Progress bars ═══ */
+.bar-row{display:flex;align-items:center;gap:10px;margin:8px 0}
+.bar-label{white-space:nowrap;min-width:100px;font-size:.9rem}
+.bar{flex:1;height:14px;background:#111;border-radius:7px;overflow:hidden}
+.bar-fill{height:100%;border-radius:7px;transition:width .1s linear}
+.bar-val{min-width:70px;text-align:right;font-size:.85rem;white-space:nowrap}
+.gold-bg{background:var(--gold)}.green-bg{background:var(--green)}.red-bg{background:var(--red)}.blue-bg{background:var(--blue)}.yellow-bg{background:var(--yellow)}
+
+/* ═══ Pool pills ═══ */
+.pool-pills{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.pool-pill{background:#111;border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:.85rem;white-space:nowrap}
+.pool-pills.small .pool-pill{font-size:.75rem;padding:2px 8px}
+
+/* ═══ Production header ═══ */
+.prod-header{display:flex;justify-content:space-between;align-items:center;padding:8px 4px;font-size:1.1rem;font-weight:700}
+.timer-display{font-variant-numeric:tabular-nums}
+.timer-warn{color:var(--yellow)}.timer-crit{color:var(--red);animation:blink .5s infinite alternate}
+@keyframes blink{from{opacity:1}to{opacity:.4}}
+.fever-badge{background:var(--red);color:#fff;padding:2px 10px;border-radius:12px;font-size:.85rem;animation:blink .3s infinite alternate}
+.hidden{display:none!important}
+
+/* ═══ Oven card ═══ */
+.oven-card{position:relative}
+.oven-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-weight:600}
+.oven-empty{color:var(--dim);text-align:center;padding:20px;font-style:italic}
+.cooking-row{display:flex;align-items:center;gap:8px;margin:6px 0}
+.cooking-zone{font-weight:700;min-width:70px;text-align:center;padding:2px 8px;border-radius:6px;font-size:.85rem}
+.zone-raw{background:rgba(59,130,246,.2);color:var(--blue)}
+.zone-cuit{background:rgba(234,179,8,.2);color:var(--yellow)}
+.zone-perfect{background:rgba(34,197,94,.2);color:var(--green)}
+.zone-burned{background:rgba(239,68,68,.2);color:var(--red)}
+.zone-sweet{background:rgba(168,85,247,.2);color:var(--purple)}
+
+/* ═══ Cookie grid ═══ */
+.cookie-grid{display:grid;grid-template-columns:repeat(4,var(--cell));grid-template-rows:repeat(5,var(--cell));gap:4px;justify-content:center;margin:12px auto}
+.cookie-cell{width:var(--cell);height:var(--cell);display:flex;align-items:center;justify-content:center;border-radius:8px;font-size:1.6rem;background:#12122a;border:2px solid transparent;transition:background .15s,border-color .15s,box-shadow .15s}
+.cell-pending{opacity:.2}
+.cell-cooking{border-color:var(--gold);box-shadow:0 0 14px rgba(255,215,0,.35);animation:cookPulse .6s infinite alternate}
+@keyframes cookPulse{from{box-shadow:0 0 6px rgba(255,215,0,.2)}to{box-shadow:0 0 18px rgba(255,215,0,.5)}}
+.cell-raw{background:rgba(59,130,246,.15);border-color:var(--blue)}
+.cell-cuit{background:rgba(234,179,8,.12);border-color:var(--yellow)}
+.cell-perfect{background:rgba(34,197,94,.15);border-color:var(--green)}
+.cell-sweet{background:rgba(168,85,247,.15);border-color:var(--purple)}
+.cell-burned{background:rgba(239,68,68,.12);border-color:var(--red);opacity:.5}
+
+.extract-btn-row{text-align:center;margin-top:8px}
+
+/* ═══ Status ═══ */
+.status-row{display:flex;justify-content:space-between;align-items:center;padding:6px 4px;font-size:.9rem}
+
+/* ═══ Messages ═══ */
+.msg-log{max-height:100px;overflow-y:auto;font-size:.82rem;padding:4px 8px;background:#0a0a1a;border-radius:8px;margin:8px 0}
+.msg-log p{padding:2px 0;border-bottom:1px solid #111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msg-log p:last-child{border-bottom:none}
+
+/* ═══ Controls ═══ */
+.controls-bar{display:flex;justify-content:center;gap:8px;padding:8px 0;flex-wrap:wrap}
+
+/* ═══ Choice cards ═══ */
+.choice-card{background:#12122a;border:2px solid var(--border);border-radius:10px;padding:14px;margin:8px 0;cursor:pointer;transition:all .15s}
+.choice-card:hover{border-color:var(--gold);background:#1a1a40}
+.choice-card .arch{font-size:.75rem;padding:2px 8px;border-radius:10px;float:right}
+.arch-SKILLED{background:rgba(34,197,94,.2);color:var(--green)}
+.arch-STRAT{background:rgba(6,182,212,.2);color:var(--cyan)}
+.arch-GAMBLER{background:rgba(168,85,247,.2);color:var(--purple)}
+.arch-NEUTRAL{background:rgba(102,102,102,.2);color:var(--dim)}
+.choice-card h4{margin-bottom:4px}.choice-card p{font-size:.85rem;color:var(--dim)}
+.choice-card .needs-target{color:var(--yellow);font-size:.8rem;margin-top:4px}
+
+/* ═══ Shop ═══ */
+.shop-item{background:#12122a;border:1px solid var(--border);border-radius:10px;padding:12px;margin:6px 0;display:flex;justify-content:space-between;align-items:center;cursor:pointer;transition:all .12s}
+.shop-item:hover{border-color:var(--gold)}
+.shop-item.cant-afford{opacity:.45;pointer-events:none}
+.shop-item .rarity{font-size:.7rem;padding:1px 6px;border-radius:8px}
+.rarity-common{background:#333;color:#aaa}.rarity-uncommon{background:rgba(6,182,212,.2);color:var(--cyan)}
+.rarity-rare{background:rgba(234,179,8,.2);color:var(--yellow)}.rarity-legendary{background:rgba(168,85,247,.2);color:var(--purple)}
+.shop-cost{font-weight:700;color:var(--gold)}
+.artifact-row{display:flex;gap:4px;flex-wrap:wrap;margin:8px 0;font-size:1.3rem}
+
+/* ═══ Target select ═══ */
+.target-list{margin:8px 0}
+.target-item{padding:8px 12px;border:1px solid var(--border);border-radius:8px;margin:4px 0;cursor:pointer;display:flex;justify-content:space-between;transition:all .12s}
+.target-item:hover{border-color:var(--gold);background:#1a1a40}
+
+/* ═══ Deck editor ═══ */
+.deck-grid{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
+.deck-card{padding:8px 14px;border:2px solid var(--border);border-radius:10px;cursor:pointer;transition:all .12s;text-align:center;min-width:70px}
+.deck-card:hover{border-color:var(--gold)}
+.deck-card.selected{border-color:var(--green);background:rgba(34,197,94,.1)}
+.deck-card .emoji{font-size:1.4rem;display:block}
+.deck-card .name{font-size:.7rem;color:var(--dim)}
+.deck-count{text-align:center;margin:8px 0;color:var(--dim)}
+
+/* ═══ Result boxes ═══ */
+.result-box{background:#12122a;border-radius:8px;padding:10px;margin:6px 0;display:flex;justify-content:space-between;align-items:center}
+.result-box .info{font-size:.85rem;color:var(--dim)}
+.result-box .value{font-weight:700;color:var(--gold);font-size:1.1rem}
+
+/* ═══ Missed quota ═══ */
+.missed{background:rgba(239,68,68,.1);border:1px solid var(--red);border-radius:8px;padding:12px;margin:10px 0;text-align:center;color:var(--red)}
+
+/* ═══ Responsive ═══ */
+@media(max-width:500px){:root{--cell:40px}h1{font-size:1.8rem}.btn-lg{padding:12px 24px}}
