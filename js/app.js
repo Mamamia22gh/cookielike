@@ -1,4 +1,5 @@
 import { createGame, BALANCE, RECIPES, getRecipe, getQuota, getPasteForRound, TOPPINGS } from '../src/index.js';
+import { RECIPE_MAP } from '../src/data/recipes.js';
 
 // ═══════════════════════════════════════
 //  Constants
@@ -33,6 +34,8 @@ function init() {
 function bindUI() {
   $('btn-start').onclick = () => game.startRun();
   $('btn-start-round').onclick = () => startRound();
+  $('btn-poll-reroll').onclick = () => { game.pollReroll(); renderPoll(); };
+  $('btn-poll-confirm').onclick = () => game.pollConfirm();
   $('btn-pull').onclick = () => game.pullLever();
   $('btn-end').onclick = () => game.endRoundEarly();
   $('btn-continue').onclick = () => { game.continueFromResults(); };
@@ -81,6 +84,7 @@ function showScreen(phase) {
 function renderPhase(phase) {
   switch (phase) {
     case 'PREVIEW': renderPreview(); break;
+    case 'POLL': renderPoll(); break;
     case 'PRODUCTION': renderProductionInit(); break;
     case 'RESULTS': renderResults(); break;
     case 'CHOICE': renderChoice(); break;
@@ -136,6 +140,30 @@ function startRound() {
   }
   msgs.length = 0;
   game.startRound();
+}
+
+// ─── Poll ───
+function renderPoll() {
+  const run = game.getState().run;
+  if (!run || !run.poll) return;
+
+  const grid = $('poll-recipes');
+  grid.innerHTML = '';
+  for (const recipeId of run.poll.recipes) {
+    const r = getRecipe(recipeId);
+    const card = document.createElement('div');
+    card.className = `poll-card rarity-border-${r.rarity}`;
+    card.innerHTML = `<span class="poll-emoji">${r.emoji}</span><span class="poll-name">${r.name}</span><span class="rarity rarity-${r.rarity}">${r.rarity}</span>`;
+    grid.appendChild(card);
+  }
+
+  const rerollEl = $('poll-rerolls');
+  const left = run.poll.rerollsLeft;
+  rerollEl.innerHTML = '🔄 '.repeat(left) + '<span class="dim">' + '·  '.repeat(BALANCE.POLL_REROLLS_PER_ROUND - left) + '</span>';
+
+  const btn = $('btn-poll-reroll');
+  btn.disabled = left <= 0;
+  btn.textContent = left > 0 ? `🔄 Reroll (${left})` : '🔄 Épuisé';
 }
 
 // ─── Production init (once per round) ───
@@ -520,6 +548,8 @@ function handleKey(e) {
 
   if (phase === 'IDLE' && key === 'Enter') { game.startRun(); return; }
   if (phase === 'PREVIEW' && key === 'Enter') { startRound(); return; }
+  if (phase === 'POLL' && key === 'r') { game.pollReroll(); renderPoll(); return; }
+  if (phase === 'POLL' && key === 'Enter') { game.pollConfirm(); return; }
 
   if (phase === 'PRODUCTION') {
     if (key === 'p' || key === ' ') { e.preventDefault(); game.pullLever(); }

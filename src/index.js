@@ -8,16 +8,6 @@ import { SaveSystem } from './core/SaveSystem.js';
  * @param {number} [options.seed] — RNG seed (defaults to Date.now())
  * @param {object} [options.meta] — restored meta-progression state
  * @returns {object} Game API
- *
- * @example
- * const game = createGame({ seed: 42 });
- * game.on('round:started', (data) => console.log(`Round ${data.round}!`));
- * game.startRun();
- * game.startRound();
- * // In your render loop:
- * game.update(16); // 16ms per frame
- * game.pullLever();
- * game.extractFromOven(0);
  */
 export function createGame(options = {}) {
   const loop = new GameLoop(options);
@@ -26,10 +16,13 @@ export function createGame(options = {}) {
     // ─── Lifecycle ───
     startRun:           ()                          => loop.startRun(),
     startRound:         ()                          => loop.startRound(),
+    pollReroll:         ()                          => loop.pollReroll(),
+    pollConfirm:        ()                          => loop.pollConfirm(),
     update:             (dtMs)                      => loop.update(dtMs),
 
     // ─── Production actions ───
     pullLever:          ()                          => loop.pullLever(),
+    extractCookie:      (ovenIdx, col, row)         => loop.extractCookie(ovenIdx, col, row),
     extractFromOven:    (ovenIndex)                 => loop.extractFromOven(ovenIndex),
     armTopping:         (toppingId)                 => loop.armTopping(toppingId),
     endRoundEarly:      ()                          => loop.endRoundEarly(),

@@ -37,6 +37,10 @@ export const BALANCE = Object.freeze({
   SHOP_REROLL_INCREMENT: 5,
   SHOP_PRICE_SCALING: 0.5,
 
+  // Poll
+  POLL_SIZE: 4,
+  POLL_REROLLS_PER_ROUND: 3,
+
   // Quota scaling — quota(round) = QUOTA_BASE * QUOTA_GROWTH^(round-1)
   QUOTA_BASE: 150,
   QUOTA_GROWTH: 1.35,
@@ -70,7 +74,7 @@ export const BALANCE = Object.freeze({
     BURNED:  { start: 0.85, end: 1.00, multiplier: 0,    label: 'BRÛLÉ' },
   }),
 
-  COOKING_BASE_DURATION_SEC: 2.4,
+  COOKING_BASE_DURATION_SEC: 7.2,
 
   // Fever mode
   FEVER_THRESHOLD: 5,

@@ -1,0 +1,172 @@
+import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+
+/* ── Custom shaders ── */
+
+const VignetteShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    offset: { value: 1.0 },
+    darkness: { value: 1.2 },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float offset;
+    uniform float darkness;
+    varying vec2 vUv;
+    void main() {
+      vec4 texel = texture2D(tDiffuse, vUv);
+      vec2 uv = (vUv - vec2(0.5)) * vec2(offset);
+      float vig = clamp(1.0 - dot(uv, uv), 0.0, 1.0);
+      texel.rgb *= mix(1.0 - darkness, 1.0, vig);
+      gl_FragColor = texel;
+    }
+  `,
+};
+
+const FilmGrainShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    time: { value: 0 },
+    intensity: { value: 0.08 },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float time;
+    uniform float intensity;
+    varying vec2 vUv;
+    float rand(vec2 co) {
+      return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
+    }
+    void main() {
+      vec4 texel = texture2D(tDiffuse, vUv);
+      float noise = rand(vUv + vec2(time)) * intensity;
+      texel.rgb += vec3(noise - intensity * 0.5);
+      gl_FragColor = texel;
+    }
+  `,
+};
+
+const PixelateShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    resolution: { value: new THREE.Vector2(1920, 1080) },
+    pixelSize: { value: 3.0 },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform vec2 resolution;
+    uniform float pixelSize;
+    varying vec2 vUv;
+    void main() {
+      vec2 dxy = pixelSize / resolution;
+      vec2 coord = dxy * floor(vUv / dxy) + dxy * 0.5;
+      gl_FragColor = texture2D(tDiffuse, coord);
+    }
+  `,
+};
+
+const ColorCorrectionShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    saturation: { value: 1.15 },
+    brightness: { value: 1.35 },
+    contrast: { value: 1.05 },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float saturation;
+    uniform float brightness;
+    uniform float contrast;
+    varying vec2 vUv;
+    void main() {
+      vec4 texel = texture2D(tDiffuse, vUv);
+      texel.rgb *= brightness;
+      texel.rgb = (texel.rgb - 0.5) * contrast + 0.5;
+      float grey = dot(texel.rgb, vec3(0.299, 0.587, 0.114));
+      texel.rgb = mix(vec3(grey), texel.rgb, saturation);
+      gl_FragColor = texel;
+    }
+  `,
+};
+
+/**
+ * Post-processing: bloom, color, pixelation, vignette, grain.
+ * Style: Cloverpit / Content Warning retro.
+ */
+export function createPostFX(renderer, scene, camera) {
+  const size = renderer.getSize(new THREE.Vector2());
+  const composer = new EffectComposer(renderer);
+
+  const renderPass = new RenderPass(scene, camera);
+  composer.addPass(renderPass);
+
+  const bloomPass = new UnrealBloomPass(size, 0.5, 0.4, 0.65);
+  composer.addPass(bloomPass);
+
+  const colorPass = new ShaderPass(ColorCorrectionShader);
+  composer.addPass(colorPass);
+
+  const pixelPass = new ShaderPass(PixelateShader);
+  pixelPass.uniforms.resolution.value.set(size.x, size.y);
+  pixelPass.uniforms.pixelSize.value = 2.5;
+  composer.addPass(pixelPass);
+
+  const vignettePass = new ShaderPass(VignetteShader);
+  vignettePass.uniforms.offset.value = 1.0;
+    vignettePass.uniforms.darkness.value = 0.35;
+  composer.addPass(vignettePass);
+
+  const grainPass = new ShaderPass(FilmGrainShader);
+  grainPass.uniforms.intensity.value = 0.05;
+  composer.addPass(grainPass);
+
+  return {
+    composer,
+    renderPass,
+    bloomPass,
+    pixelPass,
+    grainPass,
+    resize(w, h) {
+      composer.setSize(w, h);
+      pixelPass.uniforms.resolution.value.set(w, h);
+    },
+    update(dt) {
+      grainPass.uniforms.time.value += dt;
+    },
+    render() {
+      composer.render();
+    },
+  };
+}

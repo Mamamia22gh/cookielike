@@ -2,9 +2,9 @@ import { getOvenType } from '../data/ovens.js';
 import { BALANCE } from '../data/balance.js';
 
 /**
- * Chain-cooking oven system.
- * Each oven cooks one cookie at a time from a 4×5 box.
- * Player extracts each cookie individually with timing.
+ * Parallel-cooking oven system.
+ * All cookies in a box cook simultaneously at slightly different speeds.
+ * Player aims at individual cookies and extracts them when timing is right.
  */
 export class OvenSystem {
   #events;
@@ -17,21 +17,37 @@ export class OvenSystem {
     return run.ovens.findIndex(o => o.box === null);
   }
 
-  loadBox(run, ovenIndex, box) {
+  /**
+   * Load a box into an oven. Initializes per-cookie cooking states
+   * with randomised speed offsets (deterministic via RNG).
+   */
+  loadBox(run, ovenIndex, box, rng) {
     const oven = run.ovens[ovenIndex];
     if (!oven) { this.#events.emit('oven:invalid_index', { ovenIndex }); return false; }
     if (oven.box !== null) { this.#events.emit('oven:occupied', { ovenIndex }); return false; }
 
     oven.box = box;
-    oven.cookieIndex = 0;
-    oven.progress = 0;
 
-    this.#events.emit('oven:loaded', { ovenIndex, ovenType: oven.typeId, box });
+    const cols = box.grid.length;
+    const rows = box.grid[0]?.length ?? BALANCE.BOX_SIZE;
+    const total = cols * rows;
+
+    oven.cookieStates = [];
+    for (let i = 0; i < total; i++) {
+      oven.cookieStates.push({
+        progress: 0,
+        speed: 0.7 + (rng ? rng.next() : Math.random()) * 0.6, // 0.70 – 1.30
+        done: false,
+      });
+    }
+
+    this.#events.emit('oven:loaded', { ovenIndex, ovenType: oven.typeId, box, totalCookies: total });
     return true;
   }
 
   /**
-   * Advance all ovens. Auto-burns cookies that reach 100%.
+   * Advance all ovens. Each cookie progresses independently.
+   * Auto-burns cookies that reach 100%.
    * Returns array of events: { type: 'burn'|'complete', ovenIndex, ... }
    */
   update(run, dtSec, speedBonus = 1) {
@@ -39,40 +55,54 @@ export class OvenSystem {
 
     for (let i = 0; i < run.ovens.length; i++) {
       const oven = run.ovens[i];
-      if (!oven.box) continue;
-
-      const totalCookies = run.boxSize * BALANCE.BOX_WIDTH;
-      if (oven.cookieIndex >= totalCookies) continue;
+      if (!oven.box || !oven.cookieStates) continue;
 
       const ovenType = getOvenType(oven.typeId);
-      let speed = ovenType.speedMultiplier * speedBonus;
-      if (run.cookingUpgrades.includes('speed_demon')) speed *= 2;
+      let baseSpeed = ovenType.speedMultiplier * speedBonus;
+      if (run.cookingUpgrades.includes('speed_demon')) baseSpeed *= 2;
+      const progressPerSec = baseSpeed / BALANCE.COOKING_BASE_DURATION_SEC;
 
-      const progressPerSec = speed / BALANCE.COOKING_BASE_DURATION_SEC;
-      oven.progress += progressPerSec * dtSec;
+      const cols = oven.box.grid.length;
+      const rows = oven.box.grid[0]?.length ?? BALANCE.BOX_SIZE;
+      let anyAlive = false;
 
+      for (let ci = 0; ci < oven.cookieStates.length; ci++) {
+        const cs = oven.cookieStates[ci];
+        if (cs.done) continue;
+
+        cs.progress += progressPerSec * cs.speed * dtSec;
+        anyAlive = true;
+
+        // Auto-burn at 100%
+        if (cs.progress >= 1.0) {
+          cs.progress = 1.0;
+          cs.done = true;
+
+          const col = Math.floor(ci / rows);
+          const row = ci % rows;
+          if (oven.box.grid[col]?.[row]) {
+            oven.box.grid[col][row].cookingZone = 'BURNED';
+            oven.box.grid[col][row].cookingMulti = 0;
+          }
+
+          events.push({ type: 'burn', ovenIndex: i, cookieIndex: ci, col, row });
+        }
+      }
+
+      // Emit per-cookie progresses
       this.#events.emit('oven:progress', {
         ovenIndex: i,
-        cookieIndex: oven.cookieIndex,
-        totalCookies,
-        progress: Math.min(1, oven.progress),
+        cookieStates: oven.cookieStates,
+        totalCookies: oven.cookieStates.length,
       });
 
-      // Auto-burn at 100%
-      while (oven.progress >= 1.0 && oven.cookieIndex < totalCookies) {
-        const overflow = oven.progress - 1.0;
-        this.#setCookieResult(oven, run.boxSize, 'BURNED', 0);
-        events.push({ type: 'burn', ovenIndex: i, cookieIndex: oven.cookieIndex - 1 });
-
-        if (oven.cookieIndex >= totalCookies) {
-          const box = oven.box;
-          oven.box = null;
-          oven.cookieIndex = 0;
-          oven.progress = 0;
-          events.push({ type: 'complete', ovenIndex: i, box });
-        } else {
-          oven.progress = overflow; // carry over excess time
-        }
+      // Check completion after burns
+      const allDone = oven.cookieStates.every(cs => cs.done);
+      if (allDone) {
+        const box = oven.box;
+        oven.box = null;
+        oven.cookieStates = null;
+        events.push({ type: 'complete', ovenIndex: i, box });
       }
     }
 
@@ -80,17 +110,23 @@ export class OvenSystem {
   }
 
   /**
-   * Extract the currently-cooking cookie. Evaluates timing zone.
+   * Extract a specific cookie by grid coordinates.
+   * Evaluates timing zone based on individual progress.
    * @returns {{ box, complete, cookingResult }|null}
    */
-  extractCookie(run, ovenIndex, cookingUpgrades, effectMods = {}) {
+  extractCookie(run, ovenIndex, col, row, cookingUpgrades, effectMods = {}) {
     const oven = run.ovens[ovenIndex];
-    if (!oven?.box) return null;
+    if (!oven?.box || !oven.cookieStates) return null;
 
-    const totalCookies = run.boxSize * BALANCE.BOX_WIDTH;
-    if (oven.cookieIndex >= totalCookies) return null;
+    const rows = oven.box.grid[0]?.length ?? BALANCE.BOX_SIZE;
+    const ci = col * rows + row;
 
-    const progress = Math.min(1, oven.progress);
+    if (ci < 0 || ci >= oven.cookieStates.length) return null;
+
+    const cs = oven.cookieStates[ci];
+    if (cs.done) return null;
+
+    const progress = Math.min(1, cs.progress);
     const zones = this.getZones(oven.typeId, cookingUpgrades, effectMods);
     const cookingResult = this.#evaluateTiming(progress, zones);
 
@@ -104,23 +140,28 @@ export class OvenSystem {
       cookingResult.ovenEffect = 'reshuffle';
     }
 
-    this.#setCookieResult(oven, run.boxSize, cookingResult.zone, cookingResult.multiplier);
+    // Mark done
+    cs.done = true;
 
-    const complete = oven.cookieIndex >= totalCookies;
+    if (oven.box.grid[col]?.[row]) {
+      oven.box.grid[col][row].cookingZone = cookingResult.zone;
+      oven.box.grid[col][row].cookingMulti = cookingResult.multiplier;
+    }
+
+    const allDone = oven.cookieStates.every(s => s.done);
 
     this.#events.emit('oven:extracted', {
-      ovenIndex,
-      cookieIndex: oven.cookieIndex - 1,
+      ovenIndex, col, row,
+      cookieIndex: ci,
       progress,
       cookingResult,
-      complete,
+      complete: allDone,
     });
 
-    if (complete) {
+    if (allDone) {
       const box = oven.box;
       oven.box = null;
-      oven.cookieIndex = 0;
-      oven.progress = 0;
+      oven.cookieStates = null;
       return { box, complete: true, cookingResult };
     }
 
@@ -130,23 +171,11 @@ export class OvenSystem {
   clearAll(run) {
     for (const oven of run.ovens) {
       oven.box = null;
-      oven.cookieIndex = 0;
-      oven.progress = 0;
+      oven.cookieStates = null;
     }
   }
 
   // ── Internal ──
-
-  #setCookieResult(oven, boxHeight, zone, multiplier) {
-    const col = Math.floor(oven.cookieIndex / boxHeight);
-    const row = oven.cookieIndex % boxHeight;
-    if (oven.box.grid[col]?.[row]) {
-      oven.box.grid[col][row].cookingZone = zone;
-      oven.box.grid[col][row].cookingMulti = multiplier;
-    }
-    oven.cookieIndex++;
-    oven.progress = 0;
-  }
 
   /**
    * Get computed cooking zones for an oven type + upgrades.

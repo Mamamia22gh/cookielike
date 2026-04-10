@@ -19,6 +19,8 @@ describe('Integration: full game flow', () => {
     const game = createGame({ seed: 42 });
     game.startRun();
     game.startRound();
+    expect(game.getPhase()).toBe('POLL');
+    game.pollConfirm();
     expect(game.getPhase()).toBe('PRODUCTION');
   });
 
@@ -27,6 +29,7 @@ describe('Integration: full game flow', () => {
     const game = createGame({ seed: 42 });
     game.startRun();
     game.startRound();
+    game.pollConfirm();
 
     let createdBox = null;
     game.on('box:created', (d) => { createdBox = d; });
@@ -43,6 +46,7 @@ describe('Integration: full game flow', () => {
     const game = createGame({ seed: 42 });
     game.startRun();
     game.startRound();
+    game.pollConfirm();
 
     game.pullLever();
 
@@ -51,10 +55,13 @@ describe('Integration: full game flow', () => {
     game.on('box:scored', (d) => { scoredBox = d; });
 
     // Extract all 20 cookies at perfect timing
-    for (let i = 0; i < TOTAL_COOKIES; i++) {
-      run.ovens[0].progress = 0.75;
-      const result = game.extractFromOven(0);
-      if (i < TOTAL_COOKIES - 1) {
+    const rows = BALANCE.BOX_SIZE;
+    for (let ci = 0; ci < TOTAL_COOKIES; ci++) {
+      run.ovens[0].cookieStates[ci].progress = 0.75;
+      const col = Math.floor(ci / rows);
+      const row = ci % rows;
+      const result = game.extractCookie(0, col, row);
+      if (ci < TOTAL_COOKIES - 1) {
         expect(result).toBeNull(); // not complete yet
       } else {
         expect(result).not.toBeNull(); // box complete
@@ -70,14 +77,18 @@ describe('Integration: full game flow', () => {
     const game = createGame({ seed: 42 });
     game.startRun();
     game.startRound();
+    game.pollConfirm();
 
     const run = game.getState().run;
 
     // Produce a box
     game.pullLever();
-    for (let i = 0; i < TOTAL_COOKIES; i++) {
-      run.ovens[0].progress = 0.75;
-      game.extractFromOven(0);
+    const rows = BALANCE.BOX_SIZE;
+    for (let ci = 0; ci < TOTAL_COOKIES; ci++) {
+      run.ovens[0].cookieStates[ci].progress = 0.75;
+      const col = Math.floor(ci / rows);
+      const row = ci % rows;
+      game.extractCookie(0, col, row);
     }
 
     // End round — 1 box may not meet quota, that's fine
@@ -105,6 +116,7 @@ describe('Integration: full game flow', () => {
     const game = createGame({ seed: 42 });
     game.startRun();
     game.startRound();
+    game.pollConfirm();
     game.endRoundEarly();
     expect(game.getPhase()).toBe('GAME_OVER');
   });
@@ -115,12 +127,16 @@ describe('Integration: full game flow', () => {
       const game = createGame({ seed });
       game.startRun();
       game.startRound();
+      game.pollConfirm();
       game.pullLever();
       const run = game.getState().run;
       // Extract all cookies at perfect
-      for (let i = 0; i < TOTAL_COOKIES; i++) {
-        run.ovens[0].progress = 0.75;
-        game.extractFromOven(0);
+      const rows = BALANCE.BOX_SIZE;
+      for (let ci = 0; ci < TOTAL_COOKIES; ci++) {
+        run.ovens[0].cookieStates[ci].progress = 0.75;
+        const col = Math.floor(ci / rows);
+        const row = ci % rows;
+        game.extractCookie(0, col, row);
       }
       const box = run.roundBoxes[0];
       return {

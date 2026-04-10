@@ -34,7 +34,7 @@ export class MachineSystem {
    * @returns {number}
    */
   getPullCost(run) {
-    const pool = run.machine.pool;
+    const pool = run.machine.activePool || run.machine.pool;
     const totalWeight = pool.reduce((s, e) => s + e.weight, 0);
     if (totalWeight === 0) return run.boxSize;
 

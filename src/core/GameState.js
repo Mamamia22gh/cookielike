@@ -1,11 +1,12 @@
 import { BALANCE } from '../data/balance.js';
 import { BALANCE as B } from '../data/balance.js';
 
-/** @typedef {'IDLE'|'PREVIEW'|'PRODUCTION'|'RESULTS'|'CHOICE'|'SHOP'|'GAME_OVER'|'VICTORY'} Phase */
+/** @typedef {'IDLE'|'PREVIEW'|'POLL'|'PRODUCTION'|'RESULTS'|'CHOICE'|'SHOP'|'GAME_OVER'|'VICTORY'} Phase */
 
 export const PHASE = Object.freeze({
   IDLE: 'IDLE',
   PREVIEW: 'PREVIEW',
+  POLL: 'POLL',
   PRODUCTION: 'PRODUCTION',
   RESULTS: 'RESULTS',
   CHOICE: 'CHOICE',
@@ -69,8 +70,7 @@ export function createRunState(meta) {
     id: uid('oven'),
     typeId,
     box: null,
-    cookieIndex: 0,
-    progress: 0,
+    cookieStates: null,
   }));
 
   return {
@@ -119,6 +119,8 @@ export function createRunState(meta) {
       remaining: 0,
     },
     rerollTokens: 0,
+
+    poll: null,
 
     currentChoices: [],
     roundBoxes: [],

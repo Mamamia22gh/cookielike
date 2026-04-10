@@ -13,6 +13,7 @@ import { ChoiceSystem } from '../systems/ChoiceSystem.js';
 import { ShopSystem } from '../systems/ShopSystem.js';
 import { MetaSystem } from '../systems/MetaSystem.js';
 import { EffectSystem } from '../systems/EffectSystem.js';
+import { PollSystem } from '../systems/PollSystem.js';
 
 /**
  * Main game orchestrator.
@@ -39,6 +40,7 @@ export class GameLoop {
     this.shop = new ShopSystem(this.events);
     this.meta = new MetaSystem(this.events);
     this.effects = new EffectSystem();
+    this.poll = new PollSystem(this.events);
   }
 
   /** Get computed effect modifiers for the current run. */
@@ -67,6 +69,31 @@ export class GameLoop {
     }
 
     const run = this.state.run;
+    this.poll.generate(run, this.rng);
+    this.#setPhase(PHASE.POLL);
+    this.events.emit('poll:opened', {
+      recipes: run.poll.recipes,
+      rerollsLeft: run.poll.rerollsLeft,
+    });
+    return true;
+  }
+
+  pollReroll() {
+    if (this.state.phase !== PHASE.POLL) {
+      return this.#error('Can only reroll poll during POLL');
+    }
+    return this.poll.reroll(this.state.run, this.rng);
+  }
+
+  pollConfirm() {
+    if (this.state.phase !== PHASE.POLL) {
+      return this.#error('Can only confirm poll during POLL');
+    }
+
+    const run = this.state.run;
+    // Build active pool from poll selection
+    run.machine.activePool = this.poll.getActivePool(run);
+
     const mods = this.#getMods();
 
     // Paste: base + growth + permanent bonuses + artifact bonuses
@@ -74,10 +101,7 @@ export class GameLoop {
       + mods.pasteBonus;
     run.paste.bonusTemp = 0;
 
-    // Apply artifact permanent paste (one-time on acquisition, already in bonusPerm)
-    // Apply benne capacity bonus
     run.benne.capacity = BALANCE.BENNE_CAPACITY + mods.benneBonus;
-    // Store shop discount for ShopSystem
     run.shopDiscount = mods.shopDiscount;
 
     run.timer.remaining = BALANCE.ROUND_DURATION_SEC;
@@ -111,13 +135,18 @@ export class GameLoop {
     // Round timer
     run.timer.remaining = Math.max(0, run.timer.remaining - dtSec);
 
-    // Ovens — chain cooking with artifact speed bonus
+    // Ovens — parallel cooking with artifact speed bonus
     const speedBonus = 1 + mods.cookingSpeedPercent / 100;
     const ovenEvents = this.oven.update(run, dtSec, speedBonus);
     for (const evt of ovenEvents) {
       if (evt.type === 'burn') {
         run.rhythmStreak = 0;
-        this.events.emit('oven:cookie_burned', { ovenIndex: evt.ovenIndex, cookieIndex: evt.cookieIndex });
+        this.events.emit('oven:cookie_burned', {
+          ovenIndex: evt.ovenIndex,
+          cookieIndex: evt.cookieIndex,
+          col: evt.col,
+          row: evt.row,
+        });
       }
       if (evt.type === 'complete') {
         this.#completeBox(run, evt.box, evt.ovenIndex);
@@ -178,8 +207,8 @@ export class GameLoop {
 
     const boxObj = this.box.create(allCookies, BALANCE.BOX_WIDTH, run.boxSize);
 
-    // Load into oven
-    this.oven.loadBox(run, freeIdx, boxObj);
+    // Load into oven with RNG for speed randomisation
+    this.oven.loadBox(run, freeIdx, boxObj, this.rng);
 
     this.events.emit('box:created', {
       box: boxObj,
@@ -192,20 +221,21 @@ export class GameLoop {
   }
 
   /**
-   * Extract the currently-cooking cookie from an oven.
-   * Returns the completed box when all cookies are done, null otherwise.
+   * Extract a specific cookie from an oven by grid coordinates.
+   * @param {number} ovenIndex
+   * @param {number} col
+   * @param {number} row
    */
-  extractFromOven(ovenIndex) {
+  extractCookie(ovenIndex, col, row) {
     if (this.state.phase !== PHASE.PRODUCTION) {
       return this.#error('Can only extract during PRODUCTION');
     }
 
     const run = this.state.run;
     const mods = this.#getMods();
-    const result = this.oven.extractCookie(run, ovenIndex, run.cookingUpgrades, mods);
+    const result = this.oven.extractCookie(run, ovenIndex, col, row, run.cookingUpgrades, mods);
 
     if (!result) {
-      this.events.emit('oven:empty', { ovenIndex });
       return null;
     }
 
@@ -228,6 +258,8 @@ export class GameLoop {
 
     this.events.emit('oven:cookie_done', {
       ovenIndex,
+      col,
+      row,
       cookingResult,
       rhythmStreak: run.rhythmStreak,
     });
@@ -236,6 +268,24 @@ export class GameLoop {
       return this.#completeBox(run, result.box, ovenIndex);
     }
 
+    return null;
+  }
+
+  /** @deprecated Use extractCookie(ovenIndex, col, row) instead. */
+  extractFromOven(ovenIndex) {
+    // Legacy compat: extract the first non-done cookie
+    const run = this.state.run;
+    const oven = run?.ovens?.[ovenIndex];
+    if (!oven?.box || !oven.cookieStates) return null;
+
+    const rows = oven.box.grid[0]?.length ?? BALANCE.BOX_SIZE;
+    for (let ci = 0; ci < oven.cookieStates.length; ci++) {
+      if (!oven.cookieStates[ci].done) {
+        const col = Math.floor(ci / rows);
+        const row = ci % rows;
+        return this.extractCookie(ovenIndex, col, row);
+      }
+    }
     return null;
   }
 
@@ -302,15 +352,7 @@ export class GameLoop {
     if (this.state.phase !== PHASE.SHOP) {
       return this.#error('Not in SHOP phase');
     }
-    const ok = this.shop.buyArtifact(this.state.run, offeringIndex);
-    if (ok) {
-      // Apply immediate effects (permanent paste)
-      const mods = this.#getMods();
-      if (mods.pastePermanent > this.state.run.paste.bonusPerm) {
-        // Recalc — artifact added paste
-      }
-    }
-    return ok;
+    return this.shop.buyArtifact(this.state.run, offeringIndex);
   }
 
   shopBuy(actionId, target = null) {

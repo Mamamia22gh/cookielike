@@ -194,5 +194,18 @@ kbd{background:#111;padding:2px 6px;border-radius:4px;font-size:.75rem;border:1p
 /* ═══ Missed quota ═══ */
 .missed{background:rgba(239,68,68,.1);border:1px solid var(--red);border-radius:8px;padding:12px;margin:10px 0;text-align:center;color:var(--red)}
 
+/* ═══ Poll ═══ */
+.poll-subtitle{color:var(--dim);margin-bottom:12px}
+.poll-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:12px 0}
+.poll-card{background:var(--bg);border:2px solid var(--border);border-radius:10px;padding:12px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:4px;transition:border-color .2s}
+.poll-emoji{font-size:2rem}
+.poll-name{font-weight:600;color:var(--white)}
+.rarity-border-common{border-color:var(--dim)}
+.rarity-border-uncommon{border-color:var(--green)}
+.rarity-border-rare{border-color:var(--blue)}
+.rarity-border-legendary{border-color:var(--gold)}
+.poll-rerolls{text-align:center;font-size:1.3rem;margin:8px 0;letter-spacing:4px}
+.poll-actions{display:flex;gap:12px;justify-content:center;margin-top:12px}
+
 /* ═══ Responsive ═══ */
 @media(max-width:500px){:root{--cell:40px}h1{font-size:1.8rem}.btn-lg{padding:12px 24px}}

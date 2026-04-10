@@ -1,16 +1,24 @@
 {
   "name": "cookielike",
-  "version": "0.1.0",
-  "description": "Cookie roguelike - headless game engine",
+  "version": "0.2.0",
+  "description": "Cookie roguelike — 3D factory game",
   "type": "module",
   "main": "src/index.js",
   "scripts": {
-    "dev": "node src/dev/DevTUI.js",
+    "start": "vite --open",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "dev:tui": "node src/dev/DevTUI.js",
     "simulate": "node src/dev/DevSimulator.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  "dependencies": {
+    "three": "^0.173.0"
+  },
   "devDependencies": {
+    "vite": "^6.2.0",
     "vitest": "^3.1.1"
   }
 }
