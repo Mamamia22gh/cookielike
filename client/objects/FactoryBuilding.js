@@ -73,28 +73,71 @@ export class FactoryBuilding {
     // ── Ceiling ──
     const ceilTex = makeCeilingTexture(512);
     const ceilMat = new THREE.MeshStandardMaterial({ map: ceilTex, roughness: 0.85, metalness: 0.02 });
-    const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(R * 2, R * 2), ceilMat);
-    ceiling.rotation.x = Math.PI / 2;
-    ceiling.position.y = H;
-    this.group.add(ceiling);
 
-    // ── Single hanging bulb ──
-    const wireMat = createMaterial(0x222222, 0.5, 0.5);
-    const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 1.2, 4), wireMat);
-    wire.position.set(0, H - 0.6, 0);
-    this.group.add(wire);
+    // Two ceiling halves with a gap for the skylight
+    const skylightW = 2.0, skylightD = 2.0;
+    const ceilHalfZ = (R * 2 - skylightD) / 2;
 
-    const bulbMat = createMaterial(0xffffdd, 0.1, 0.0);
-    bulbMat.emissive = new THREE.Color(0xffeeaa);
-    bulbMat.emissiveIntensity = 1.5;
-    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), bulbMat);
-    bulb.position.set(0, H - 1.25, 0);
-    this.group.add(bulb);
+    // North half
+    const ceilN = new THREE.Mesh(new THREE.PlaneGeometry(R * 2, ceilHalfZ), ceilMat);
+    ceilN.rotation.x = Math.PI / 2;
+    ceilN.position.set(0, H, -(skylightD / 2 + ceilHalfZ / 2));
+    this.group.add(ceilN);
 
-    const shadeMat = createMaterial(0x444444, 0.5, 0.3);
-    const shade = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.12, 8, 1, true), shadeMat);
-    shade.position.set(0, H - 1.15, 0);
-    this.group.add(shade);
+    // South half
+    const ceilS = new THREE.Mesh(new THREE.PlaneGeometry(R * 2, ceilHalfZ), ceilMat);
+    ceilS.rotation.x = Math.PI / 2;
+    ceilS.position.set(0, H, skylightD / 2 + ceilHalfZ / 2);
+    this.group.add(ceilS);
+
+    // Side strips (east/west of skylight)
+    const sideStripW = (R * 2 - skylightW) / 2;
+    const ceilE = new THREE.Mesh(new THREE.PlaneGeometry(sideStripW, skylightD), ceilMat);
+    ceilE.rotation.x = Math.PI / 2;
+    ceilE.position.set(skylightW / 2 + sideStripW / 2, H, 0);
+    this.group.add(ceilE);
+
+    const ceilW = new THREE.Mesh(new THREE.PlaneGeometry(sideStripW, skylightD), ceilMat);
+    ceilW.rotation.x = Math.PI / 2;
+    ceilW.position.set(-(skylightW / 2 + sideStripW / 2), H, 0);
+    this.group.add(ceilW);
+
+    // Skylight glass (semi-transparent, dirty)
+    const glassMat = new THREE.MeshStandardMaterial({
+      color: 0x111118,
+      transparent: true,
+      opacity: 0.25,
+      roughness: 0.15,
+      metalness: 0.3,
+      side: THREE.DoubleSide,
+    });
+    const glass = new THREE.Mesh(new THREE.PlaneGeometry(skylightW, skylightD), glassMat);
+    glass.rotation.x = Math.PI / 2;
+    glass.position.set(0, H - 0.01, 0);
+    this.group.add(glass);
+
+    // Skylight frame (metal border)
+    const frameMat = createMaterial(0x3a3a44, 0.4, 0.7);
+    const frameH = 0.06;
+    // North/South frame bars
+    for (const dz of [-skylightD / 2, skylightD / 2]) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(skylightW + 0.1, frameH, 0.06), frameMat);
+      bar.position.set(0, H - frameH / 2, dz);
+      this.group.add(bar);
+    }
+    // East/West frame bars
+    for (const dx of [-skylightW / 2, skylightW / 2]) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.06, frameH, skylightD + 0.1), frameMat);
+      bar.position.set(dx, H - frameH / 2, 0);
+      this.group.add(bar);
+    }
+    // Cross bars
+    const crossBar1 = new THREE.Mesh(new THREE.BoxGeometry(skylightW, frameH * 0.6, 0.03), frameMat);
+    crossBar1.position.set(0, H - frameH / 2, 0);
+    this.group.add(crossBar1);
+    const crossBar2 = new THREE.Mesh(new THREE.BoxGeometry(0.03, frameH * 0.6, skylightD), frameMat);
+    crossBar2.position.set(0, H - frameH / 2, 0);
+    this.group.add(crossBar2);
 
     // ── Baseboard ──
     const baseMat = createMaterial(0x5a5448, 0.7, 0.05);
@@ -110,15 +153,6 @@ export class FactoryBuilding {
     }
 
     // ── Exposed wires along ceiling ──
-    const cableMat = createMaterial(0x222222, 0.6, 0.3);
-    const cable1 = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, R, 4), cableMat);
-    cable1.rotation.x = Math.PI / 2;
-    cable1.position.set(0.3, H - 0.05, -R / 2);
-    this.group.add(cable1);
-    const cable2 = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, R * 2, 4), cableMat);
-    cable2.rotation.z = Math.PI / 2;
-    cable2.position.set(0, H - 0.05, -R + 0.15);
-    this.group.add(cable2);
 
     // ── Post-its (Clusters on walls) ──
     const postitColors = [0xffeb3b, 0xff99cc, 0xccff90, 0x80deea, 0xffb74d];

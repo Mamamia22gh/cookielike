@@ -344,25 +344,25 @@ export class CRTTerminal {
     this._clear();
 
     // Title
-    this._text('╔══════════════════════════════╗', 400, 120, { align: 'center', size: 22 });
-    this._text('║    🍪 COOKIES AT HOME 🍪    ║', 400, 150, { align: 'center', size: 22 });
-    this._text('╚══════════════════════════════╝', 400, 180, { align: 'center', size: 22 });
+    this._text('╔══════════════════════════════╗', 400, 120, { align: 'center', size: 28 });
+    this._text('║    🍪 COOKIES AT HOME 🍪    ║', 400, 155, { align: 'center', size: 28 });
+    this._text('╚══════════════════════════════╝', 400, 190, { align: 'center', size: 28 });
 
-    this._text('> SYSTÈME DE PRODUCTION v0.2', 400, 230, { align: 'center', color: '#00bb44', size: 18 });
+    this._text('> SYSTÈME DE PRODUCTION v0.2', 400, 245, { align: 'center', color: '#00bb44', size: 22 });
 
     // Menu items
-    let y = 320;
+    let y = 340;
     for (let i = 0; i < this._menuItems.length; i++) {
       const item = this._menuItems[i];
       const selected = i === this._selectedIndex;
       const color = selected ? '#00ff88' : '#007733';
       const prefix = selected ? '►  ' : '   ';
-      this._text(prefix + item.label, 400, y, { align: 'center', size: 28, color });
-      y += 50;
+      this._text(prefix + item.label, 400, y, { align: 'center', size: 34, color });
+      y += 55;
     }
 
     // Footer
-    this._text('▲▼ NAVIGUER    ENTRÉE VALIDER', 400, 550, { align: 'center', size: 16, color: '#005522' });
+    this._text('▲▼ NAVIGUER    ENTRÉE VALIDER', 400, 550, { align: 'center', size: 20, color: '#005522' });
 
     this._flush();
   }

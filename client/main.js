@@ -55,7 +55,8 @@ class App {
     // Menu state
     this._inMenu = true;
     this._audioStarted = false;
-    this.factory.camera.position.set(0.4, 1.55, -2.2);
+    this.canvas.classList.add('menu-cursor');
+    this.factory.camera.position.set(0.65, 1.55, -2.05);
     this.factory.camera.rotation.set(-0.18, 0.25, 0);
 
     // Wire up CRT terminal menu callback
@@ -95,6 +96,10 @@ class App {
         for (const vent of this.factory.airVents) {
           vent.startSound(ctx);
         }
+        for (const light of this.factory.overheadLights) {
+          light.startSound(ctx);
+        }
+        this.factory.ambientHorror.startSound(ctx);
       }
 
       if (this._inMenu) {
@@ -130,12 +135,13 @@ class App {
 
   _startFirstPerson() {
     this._inMenu = false;
+    this.canvas.classList.remove('menu-cursor');
     this.audio.play('click');
     // Animate camera to player position
     const startPos = this.factory.camera.position.clone();
     const startRotX = this.factory.camera.rotation.x;
     const startRotY = this.factory.camera.rotation.y;
-    const targetPos = new THREE.Vector3(0, 1.7, -3.0);
+    const targetPos = new THREE.Vector3(0, 1.7, 0);
     
     let t = 0;
     const anim = () => {
@@ -146,7 +152,7 @@ class App {
         return;
       }
       const ease = 1 - Math.pow(1 - t, 3);
-      this.factory.camera.position.lerpVectors(new THREE.Vector3(0.6, 1.35, -1.6), targetPos, ease);
+      this.factory.camera.position.lerpVectors(startPos, targetPos, ease);
       this.factory.camera.rotation.x = startRotX * (1 - ease);
       this.factory.camera.rotation.y = startRotY * (1 - ease);
       requestAnimationFrame(anim);
@@ -215,8 +221,17 @@ class App {
         this.hud.setHint('');
       }
 
+      // ── Dynamic FOV based on stress ──
+      const stress = this.factory.ambientHorror.stress;
+      const baseFov = 60;
+      const stressFov = baseFov + stress * 12; // 60 -> 72
+      if (Math.abs(this.factory.camera.fov - stressFov) > 0.1) {
+        this.factory.camera.fov = stressFov;
+        this.factory.camera.updateProjectionMatrix();
+      }
+
       // ── Render with post-processing ──
-      this.postfx.update(dt);
+      this.postfx.update(dt, this.game.getPhase(), this._inMenu, stress);
       this.postfx.render();
 
       // HUD overlay on top

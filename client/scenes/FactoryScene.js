@@ -11,10 +11,14 @@ import { CRTTerminal } from '../objects/CRTTerminal.js';
 import { ParticleSystem } from '../effects/ParticleSystem.js';
 import { FloatingTextSystem } from '../effects/FloatingText.js';
 import { AirVent } from '../objects/AirVent.js';
+import { FluorescentLight } from '../objects/FluorescentLight.js';
+import { AmbientHorror } from '../objects/AmbientHorror.js';
+import { CosmicHorror } from '../objects/CosmicHorror.js';
 import { BoxStation } from '../objects/BoxStation.js';
 import { CookieModel } from '../objects/CookieModel.js';
 import { RadioPlayer } from '../objects/RadioPlayer.js';
 import { PALETTE, createMaterial } from '../utils/Materials.js';
+import { makeCountertopTexture, makeMetroTileTexture, makeOxidizedMetalTexture } from '../utils/ProceduralTextures.js';
 
 export class FactoryScene {
   constructor(renderer) {
@@ -34,10 +38,25 @@ export class FactoryScene {
     this._moveRight = false;
     this._velocity = new THREE.Vector3();
     this._direction = new THREE.Vector3();
-    this._speed = 6;
+    this._speed = 4;
+
+    // Player collision radius
+    this._playerRadius = 0.3;
+
+    // AABB collision boxes (XZ plane): { minX, maxX, minZ, maxZ }
+    this._colliders = [
+      // Desk (north wall)
+      { minX: -1.9, maxX: 1.9, minZ: -4.7, maxZ: -2.55 },
+      // Workbench + machines (south strip)
+      { minX: -4.7, maxX: 4.7, minZ: 2.7, maxZ: 4.7 },
+      // Shop counter (west wall)
+      { minX: -4.7, maxX: -3.5, minZ: -0.5, maxZ: 1.5 },
+      // Box station (east wall)
+      { minX: 3.15, maxX: 4.7, minZ: -0.4, maxZ: 1.4 },
+    ];
 
     this.raycaster = new THREE.Raycaster();
-    this.raycaster.far = 18;
+    this.raycaster.far = 50;
     this._center = new THREE.Vector2(0, 0);
 
     this._setupLights();
@@ -47,18 +66,17 @@ export class FactoryScene {
     this.scene.add(this.building.group);
 
     /*
-     * ── LAYOUT: compact room (R=5), machines against walls ──
+     * ── LAYOUT: U-shaped workshop (R=5) ──
      *
-     *          NORTH wall (-Z, z=-5)
+     *          NORTH wall (z=-5)
      *       [Desk: CRT + Radio]
      *
-     *  WEST wall (x=-5)     EAST wall (x=5)
-     *  SlotMachine(0.5)     Oven(0.5) + Screen
-     *  + DoughProvider
+     *  WEST wall (x=-5)          EAST wall (x=5)
+     *  [Shop étagère]            [BoxStation]
      *
-     *          SOUTH wall (+Z, z=5)
-     *    Shop    BoxStation   Choices
-     *         [AirVent]
+     *          SOUTH wall (z=+5)
+     *  [Pâte+Slot] ══ bench ══ [Four+Écran]
+     *           [AirVent]
      */
 
     // ── NORTH: Desk against back wall ──
@@ -78,61 +96,60 @@ export class FactoryScene {
     this.radio.group.scale.setScalar(0.85);
     this.scene.add(this.radio.group);
 
-    // ── WEST: Slot machine + dough provider (scaled 0.5) ──
+    // ── SOUTH: Industrial workbench + production line ──
+    this._buildWorkbench();
+
     this.slotMachine = new SlotMachine();
-    this.slotMachine.group.position.set(-4.2, 0, 0);
-    this.slotMachine.group.rotation.y = Math.PI / 2;
+    this.slotMachine.group.position.set(-2.0, 0, 4.0);
+    this.slotMachine.group.rotation.y = Math.PI;
     this.slotMachine.group.scale.setScalar(0.5);
     this.scene.add(this.slotMachine.group);
 
     this.doughProvider = new DoughProvider();
-    this.doughProvider.group.position.set(-4.2, 0, 0);
-    this.doughProvider.group.rotation.y = Math.PI / 2;
+    this.doughProvider.group.position.set(-2.0, 0, 4.0);
+    this.doughProvider.group.rotation.y = Math.PI;
     this.doughProvider.group.scale.setScalar(0.5);
     this.scene.add(this.doughProvider.group);
 
-    // ── EAST: Oven + Screen (scaled 0.5) ──
     this.ovens = [];
     this.ovenScreens = [];
     {
       const oven = new OvenModel('classic', 0);
-      oven.group.position.set(4.2, 0, 0);
-      oven.group.rotation.y = -Math.PI / 2;
+      oven.group.position.set(2.2, 0, 4.0);
+      oven.group.rotation.y = Math.PI;
       oven.group.scale.setScalar(0.5);
       this.scene.add(oven.group);
       this.ovens.push(oven);
 
       const screen = new OvenScreen(0);
-      // Mounted on oven's right side as integrated panel
-      screen.group.position.set(4.2, 0, 1.2);
-      screen.group.rotation.y = -Math.PI / 2;
+      screen.group.position.set(3.6, 0, 3.5);
+      screen.group.rotation.y = Math.PI;
       screen.group.scale.setScalar(0.5);
       this.scene.add(screen.group);
       this.ovenScreens.push(screen);
     }
 
-    // ── Scored boxes on the floor ──
     this._floorBoxes = [];
 
-    // ── SOUTH: Box Station (packing table) ──
+    // ── WEST: Shop étagère ──
+    this.shopCounter = new ShopCounter();
+    this.shopCounter.group.position.set(-4.3, 0, 0.5);
+    this.shopCounter.group.rotation.y = Math.PI / 2;
+    this.shopCounter.group.scale.setScalar(0.6);
+    this.scene.add(this.shopCounter.group);
+
+    // ── EAST: Box station ──
     this.boxStation = new BoxStation();
-    this.boxStation.group.position.set(2.5, 0, 4.0);
-    this.boxStation.group.rotation.y = Math.PI;
-    this.boxStation.group.scale.setScalar(0.8);
+    this.boxStation.group.position.set(4.0, 0, 0.5);
+    this.boxStation.group.rotation.y = -Math.PI / 2;
+    this.boxStation.group.scale.setScalar(0.75);
     this.scene.add(this.boxStation.group);
 
-    // ── SOUTH: Choice Pedestals ──
+    // ── CENTER: Choice pedestals ──
     this.choicePedestals = new ChoicePedestals();
-    this.choicePedestals.group.position.set(0, 0, 3.5);
+    this.choicePedestals.group.position.set(0, 0, 1.5);
     this.choicePedestals.group.scale.setScalar(0.7);
     this.scene.add(this.choicePedestals.group);
-
-    // ── SOUTH-WEST: Shop Counter ──
-    this.shopCounter = new ShopCounter();
-    this.shopCounter.group.position.set(-2.5, 0, 4.0);
-    this.shopCounter.group.rotation.y = Math.PI;
-    this.shopCounter.group.scale.setScalar(0.7);
-    this.scene.add(this.shopCounter.group);
 
     // ── Effects ──
     this.particles = new ParticleSystem(this.scene);
@@ -141,27 +158,42 @@ export class FactoryScene {
     this._phase = 'IDLE';
     this._feverMode = false;
     this._feverLight = null;
-
-    // Pending box (delayed by craft animation)
     this._pendingBoxData = null;
-
-    // Flying cookie transfer animations
     this._transfers = [];
 
-    // ── Audio listener for positional audio ──
+    // ── Audio listener ──
     this.listener = new THREE.AudioListener();
     this.camera.add(this.listener);
-
-    // Replace dummy listener on radio
     this.radio._listener = this.listener;
 
-    // ── Air vent (single, on south wall) ──
+    // ── Air vent (East wall) ──
     this.airVents = [];
     const vent = new AirVent(this.listener);
-    vent.group.position.set(0, 2.5, 4.99); // 4.99 pour être bien enfoncé dans le mur (R=5)
-    vent.group.rotation.set(0, Math.PI, 0);
+    vent.group.position.set(4.95, 2.5, 2.5);
+    vent.group.rotation.set(0, -Math.PI / 2, 0);
+    vent.group.scale.setScalar(0.6);
     this.scene.add(vent.group);
     this.airVents.push(vent);
+
+    // Overhead LED bar (attached to the utility pipe of the workbench)
+    this.overheadLights = [];
+    const ledBar = new FluorescentLight(this.listener, 9.0);
+    ledBar.group.position.set(0, 2.25, 4.82); // Just below the pipe
+    this.scene.add(ledBar.group);
+    this.overheadLights.push(ledBar);
+
+    // Ambient horror (room-wide flicker + distant oppressive sounds)
+    this.ambientHorror = new AmbientHorror(this.listener);
+    this.ambientHorror.setLights(this._centralLight, this._ambientLight, this.overheadLights);
+    this.ambientHorror.group.position.set(0, 1.95, 0);
+    this.scene.add(this.ambientHorror.group);
+
+    // Cosmic horror entity above the skylight
+    this.cosmicHorror = new CosmicHorror();
+    this.cosmicHorror.group.position.set(0, 35, 0); // Far above ceiling
+    this.cosmicHorror.group.rotation.x = Math.PI / 2; // Face down
+    this.cosmicHorror.group.scale.setScalar(2.5);
+    this.scene.add(this.cosmicHorror.group);
   }
 
   /** Temporary listener before the real one is created. */
@@ -232,7 +264,7 @@ export class FactoryScene {
     // Stack of papers (left side of desk)
     const paperMat = createMaterial(0xeeeeee, 0.9, 0.0);
     const papers = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.04, 0.3), paperMat);
-    papers.position.set(-1.2, 0.89, 0.3);
+    papers.position.set(-0.6, 0.89, 0.3);
     papers.rotation.y = -0.2;
     deskGrp.add(papers);
 
@@ -290,19 +322,79 @@ export class FactoryScene {
     this.scene.add(deskGrp);
   }
 
+  /** Industrial workbench along the south wall. */
+  _buildWorkbench() {
+    const grp = new THREE.Group();
+    grp.name = 'Workbench';
+
+    const metalMat = createMaterial(PALETTE.metalDark, 0.3, 0.8);
+
+    // Textured countertop (worn oiled wood)
+    const counterTex = makeCountertopTexture(512);
+    const woodMat = new THREE.MeshStandardMaterial({ map: counterTex, roughness: 0.7, metalness: 0.05 });
+
+    // Continuous counter top
+    const top = new THREE.Mesh(new THREE.BoxGeometry(9.0, 0.06, 1.4), woodMat);
+    top.position.set(0, 0.88, 3.7);
+    top.castShadow = true;
+    top.receiveShadow = true;
+    grp.add(top);
+
+    // Front apron
+    const apron = new THREE.Mesh(new THREE.BoxGeometry(9.0, 0.12, 0.04), woodMat);
+    apron.position.set(0, 0.82, 3.0);
+    grp.add(apron);
+
+    // Metal legs (in visible gaps between machines)
+    for (const x of [-4.2, -0.8, 0.8, 4.2]) {
+      for (const z of [3.1, 4.3]) {
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.88, 6), metalMat);
+        leg.position.set(x, 0.44, z);
+        grp.add(leg);
+      }
+    }
+
+    // Lower foot rails
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(9.0, 0.035, 0.035), metalMat);
+    rail.position.set(0, 0.12, 3.1);
+    grp.add(rail);
+    const rail2 = new THREE.Mesh(new THREE.BoxGeometry(9.0, 0.035, 0.035), metalMat);
+    rail2.position.set(0, 0.12, 4.3);
+    grp.add(rail2);
+
+    // Textured metro tile backsplash
+    const tileTex = makeMetroTileTexture(512);
+    const tileMat = new THREE.MeshStandardMaterial({ map: tileTex, roughness: 0.4, metalness: 0.1 });
+    const splash = new THREE.Mesh(new THREE.BoxGeometry(9.2, 1.4, 0.05), tileMat);
+    splash.position.set(0, 1.55, 4.87);
+    grp.add(splash);
+
+    // Textured utility pipe (oxidized metal)
+    const pipeTex = makeOxidizedMetalTexture(256);
+    const pipeMat = new THREE.MeshStandardMaterial({ map: pipeTex, roughness: 0.45, metalness: 0.7 });
+    const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 9.0, 8), pipeMat);
+    pipe.rotation.z = Math.PI / 2;
+    pipe.position.set(0, 2.35, 4.82);
+    grp.add(pipe);
+
+    // Pipe brackets
+    for (const x of [-3.5, -1.0, 1.5, 4.0]) {
+      const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.15, 0.06), metalMat);
+      bracket.position.set(x, 2.28, 4.84);
+      grp.add(bracket);
+    }
+
+    this.scene.add(grp);
+  }
+
   _setupLights() {
     // No global ambient or directional light, only the central point light.
     // Extremely faint ambient just so absolute black isn't pitch black.
-    this.scene.add(new THREE.AmbientLight(0xfff5e6, 0.05));
+    this._ambientLight = new THREE.AmbientLight(0xff1100, 0.04);
+    this.scene.add(this._ambientLight);
 
-    // Single central warm ceiling light (matches the fixture in FactoryBuilding)
-    const centralLight = new THREE.PointLight(0xffaa55, 6.0, 25);
-    centralLight.position.set(0, 1.95, 0); // Positioned just under the bulb from FactoryBuilding
-    centralLight.castShadow = true;
-    centralLight.shadow.bias = -0.002;
-    // La lumière perd très vite de l'intensité, decay la rend plus douce au fond
-    centralLight.decay = 1.5; 
-    this.scene.add(centralLight);
+    // No central ceiling light — room lit by monster + fluorescents
+    this._centralLight = null;
   }
 
   /* ── Movement (AZERTY + QWERTY) ── */
@@ -327,9 +419,29 @@ export class FactoryScene {
     this.controls.moveRight(-this._velocity.x * dt);
     this.controls.moveForward(-this._velocity.z * dt);
     const pos = this.camera.position;
-    // Commenté pour le dev (traverser les murs)
-    // pos.x = Math.max(-4, Math.min(4, pos.x));
-    // pos.z = Math.max(-3.5, Math.min(3.5, pos.z));
+
+    // Wall bounds
+    const W = 4.7;
+    pos.x = Math.max(-W, Math.min(W, pos.x));
+    pos.z = Math.max(-W, Math.min(W, pos.z));
+
+    // AABB collision resolution (slide along surfaces)
+    const r = this._playerRadius;
+    for (const c of this._colliders) {
+      const overlapX = Math.min(pos.x + r - c.minX, c.maxX - (pos.x - r));
+      const overlapZ = Math.min(pos.z + r - c.minZ, c.maxZ - (pos.z - r));
+      if (overlapX > 0 && overlapZ > 0) {
+        // Inside — push out along the smallest overlap axis
+        if (overlapX < overlapZ) {
+          if (pos.x < (c.minX + c.maxX) / 2) pos.x = c.minX - r;
+          else pos.x = c.maxX + r;
+        } else {
+          if (pos.z < (c.minZ + c.maxZ) / 2) pos.z = c.minZ - r;
+          else pos.z = c.maxZ + r;
+        }
+      }
+    }
+
     pos.y = 1.7;
   }
 
@@ -412,8 +524,8 @@ export class FactoryScene {
     if (runOven && this.ovens[0].typeId !== runOven.typeId) {
       this.scene.remove(this.ovens[0].group);
       const oven = new OvenModel(runOven.typeId, 0);
-      oven.group.position.set(4.2, 0, 0);
-      oven.group.rotation.y = -Math.PI / 2;
+      oven.group.position.set(2.2, 0, 4.0);
+      oven.group.rotation.y = Math.PI;
       oven.group.scale.setScalar(0.5);
       this.scene.add(oven.group);
       this.ovens[0] = oven;
@@ -521,9 +633,9 @@ export class FactoryScene {
     if (screen) screen.boxComplete();
 
     const dropPos = new THREE.Vector3(
-      1 + (this._floorBoxes.length % 3) * 0.8 - 0.8,
+      -1.5 + (this._floorBoxes.length % 4) * 1.0,
       0.1,
-      1 + Math.floor(this._floorBoxes.length / 3) * 0.6,
+      1.0 + Math.floor(this._floorBoxes.length / 4) * 0.5,
     );
     this.particles.emit('score', dropPos.clone().add(new THREE.Vector3(0, 1.5, 0)));
     this.floatingText.score(data.value, dropPos.clone().add(new THREE.Vector3(0, 2, 0)));
@@ -545,9 +657,9 @@ export class FactoryScene {
     const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.1 });
     const box = new THREE.Mesh(geo, mat);
     box.position.set(
-      1 + (this._floorBoxes.length % 3) * 0.8 - 0.8,
+      -1.5 + (this._floorBoxes.length % 4) * 1.0,
       size * 0.3,
-      1 + Math.floor(this._floorBoxes.length / 3) * 0.6,
+      1.0 + Math.floor(this._floorBoxes.length / 4) * 0.5,
     );
     box.rotation.y = (Math.random() - 0.5) * 0.4;
     box.castShadow = true;
@@ -596,6 +708,27 @@ export class FactoryScene {
     for (const oven of this.ovens) oven.update(dt);
     for (const screen of this.ovenScreens) screen.update(dt);
     for (const vent of this.airVents) vent.update(dt);
+    for (const light of this.overheadLights) light.update(dt);
+    this.ambientHorror.update(dt);
+
+    // Gaze detection: looking at the cosmic horror amplifies stress
+    let gaze = 0;
+    if (this.controls.isLocked) {
+      gaze = this.cosmicHorror.getGazeIntensity(this.camera, this.raycaster);
+      if (gaze > 0) {
+        this.ambientHorror.stress = Math.min(1, this.ambientHorror.stress + gaze * dt * 0.35);
+      }
+    }
+    this.cosmicHorror.update(dt, this.camera.position, gaze);
+
+    // Screen shake from stress/gaze
+    if (this.controls.isLocked && this.ambientHorror.stress > 0.1) {
+      const s = this.ambientHorror.stress;
+      const shakeX = (Math.random() - 0.5) * s * 0.008;
+      const shakeY = (Math.random() - 0.5) * s * 0.008;
+      this.camera.rotation.x += shakeX;
+      this.camera.rotation.y += shakeY;
+    }
     if (this._feverMode && this._feverLight) {
       this._feverLight.intensity = 1.5 + Math.sin(Date.now() * 0.008) * 1.0;
     }

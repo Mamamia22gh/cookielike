@@ -154,12 +154,13 @@ export class RadioPlayer {
     // Start background vinyl crackle
     this._startCrackle(audioCtx);
 
-    // Intro glitch / crackle
+    // Fade in: start from crackle only, music fades in gradually
     if (withIntro) {
-      this._playIntroGlitch(audioCtx);
-      // Fade in the music after the glitch
       this._masterGain.gain.setValueAtTime(0, audioCtx.currentTime);
-      this._masterGain.gain.setValueCurveAtTime(new Float32Array([0, 0, 0, 0.05, 0.15]), audioCtx.currentTime, 4.0);
+      this._masterGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 1.5);
+      this._masterGain.gain.linearRampToValueAtTime(0.05, audioCtx.currentTime + 3.0);
+      this._masterGain.gain.linearRampToValueAtTime(0.15, audioCtx.currentTime + 6.0);
+      this._masterGain.gain.linearRampToValueAtTime(0.2, audioCtx.currentTime + 9.0);
     }
 
     // Shuffle playlist and start
@@ -175,49 +176,6 @@ export class RadioPlayer {
       const j = Math.floor(Math.random() * (i + 1));
       [arr[i], arr[j]] = [arr[j], arr[i]];
     }
-  }
-
-  _playIntroGlitch(ctx) {
-    const osc = ctx.createOscillator();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(50, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 1.5);
-    
-    const noise = ctx.createBufferSource();
-    const bufferSize = ctx.sampleRate * 3; // 3 seconds
-    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * 0.5;
-    }
-    noise.buffer = buffer;
-
-    const glitchGain = ctx.createGain();
-    glitchGain.gain.setValueAtTime(0.08, ctx.currentTime);
-    glitchGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 2.5);
-
-    // Panning to simulate it coming from the radio
-    const panner = ctx.createPanner();
-    panner.panningModel = 'HRTF';
-    panner.distanceModel = 'inverse';
-    panner.refDistance = 2;
-    panner.maxDistance = 25;
-    panner.rolloffFactor = 1;
-    // Set position to the radio's world position
-    const pos = new THREE.Vector3();
-    this.group.getWorldPosition(pos);
-    panner.positionX.value = pos.x;
-    panner.positionY.value = pos.y;
-    panner.positionZ.value = pos.z;
-
-    osc.connect(glitchGain);
-    noise.connect(glitchGain);
-    glitchGain.connect(panner);
-    panner.connect(ctx.destination);
-
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 2.5);
-    noise.start(ctx.currentTime);
   }
 
   async _playTrack() {

@@ -27,7 +27,6 @@ export class ChoicePedestals {
     this._pedestals = [];
     this._choices = [];
     this._build();
-    this.group.visible = false;
   }
 
   _build() {
@@ -91,7 +90,6 @@ export class ChoicePedestals {
 
   showChoices(choices) {
     this._choices = choices;
-    this.group.visible = true;
 
     for (let i = 0; i < 3; i++) {
       const p = this._pedestals[i];
@@ -101,8 +99,7 @@ export class ChoicePedestals {
       if (p.descSprite) { p.group.remove(p.descSprite); p.descSprite = null; }
       if (p.archSprite) { p.group.remove(p.archSprite); p.archSprite = null; }
 
-      if (i >= choices.length) { p.group.visible = false; continue; }
-      p.group.visible = true;
+      if (i >= choices.length) continue;
 
       const ch = choices[i];
       const archColor = ARCH_COLORS[ch.archetype] || ARCH_COLORS.NEUTRAL;
@@ -147,19 +144,26 @@ export class ChoicePedestals {
   }
 
   hide() {
-    this.group.visible = false;
     this._choices = [];
+    for (const p of this._pedestals) {
+      while (p.floatGrp.children.length) p.floatGrp.remove(p.floatGrp.children[0]);
+      if (p.nameSprite) { p.group.remove(p.nameSprite); p.nameSprite = null; }
+      if (p.descSprite) { p.group.remove(p.descSprite); p.descSprite = null; }
+      if (p.archSprite) { p.group.remove(p.archSprite); p.archSprite = null; }
+      p.floatingObj = null;
+      p.hitZone.userData.label = '';
+    }
   }
 
   getInteractables() {
-    if (!this.group.visible) return [];
+    if (this._choices.length === 0) return [];
     return this._pedestals
-      .filter(p => p.group.visible)
+      .filter((p, i) => i < this._choices.length)
       .map(p => p.hitZone);
   }
 
   update(dt) {
-    if (!this.group.visible) return;
+    if (this._choices.length === 0) return;
     const t = Date.now() * 0.001;
     for (let i = 0; i < this._pedestals.length; i++) {
       const p = this._pedestals[i];

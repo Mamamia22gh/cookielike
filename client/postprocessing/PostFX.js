@@ -90,6 +90,39 @@ const PixelateShader = {
   `,
 };
 
+const ChromaticAberrationShader = {
+  uniforms: {
+    tDiffuse:  { value: null },
+    intensity: { value: 0.4 },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float intensity;
+    varying vec2 vUv;
+    void main() {
+      vec2 dir = vUv - 0.5;
+      float d2 = dot(dir, dir);
+      // Quadratic falloff — zero at center, strong at corners
+      float aberr = d2 * intensity * 0.025;
+      float r = texture2D(tDiffuse, vUv + dir * aberr).r;
+      float g = texture2D(tDiffuse, vUv).g;
+      float b = texture2D(tDiffuse, vUv - dir * aberr).b;
+      // Edge color bleed: slight blur of R/B at edges
+      float bleed = d2 * intensity * 0.008;
+      r = mix(r, texture2D(tDiffuse, vUv + dir * aberr * 1.6).r, bleed * 3.0);
+      b = mix(b, texture2D(tDiffuse, vUv - dir * aberr * 1.6).b, bleed * 3.0);
+      gl_FragColor = vec4(r, g, b, 1.0);
+    }
+  `,
+};
+
 const ColorCorrectionShader = {
   uniforms: {
     tDiffuse:   { value: null },
@@ -194,6 +227,10 @@ export function createPostFX(renderer, scene, camera) {
   const bloomPass = new UnrealBloomPass(size, 0.5, 0.4, 0.65);
   composer.addPass(bloomPass);
 
+  const chromaPass = new ShaderPass(ChromaticAberrationShader);
+  chromaPass.uniforms.intensity.value = 0.4;
+  composer.addPass(chromaPass);
+
   const colorPass = new ShaderPass(ColorCorrectionShader);
   composer.addPass(colorPass);
 
@@ -211,20 +248,74 @@ export function createPostFX(renderer, scene, camera) {
   grainPass.uniforms.intensity.value = 0.05;
   composer.addPass(grainPass);
 
+  // Lerp states
+  let _rollLerp = 0;
+  let _menuLerp = 1;
+  let _menuGlitchTimer = 1 + Math.random() * 2;
+  let _menuGlitchAmount = 0;
+
   return {
     composer,
     renderPass,
     bloomPass,
     pixelPass,
     panniniPass,
+    chromaPass,
+    colorPass,
     grainPass,
     resize(w, h) {
       composer.setSize(w, h);
       pixelPass.uniforms.resolution.value.set(w, h);
       panniniPass.uniforms.aspect.value = w / h;
     },
-    update(dt) {
+    /** Call every frame with current game phase. */
+    update(dt, phase, inMenu, stress = 0) {
       grainPass.uniforms.time.value += dt;
+
+      // Menu B&W lerp with color glitch bursts
+      const menuTarget = inMenu ? 1 : 0;
+      _menuLerp += (menuTarget - _menuLerp) * Math.min(1, dt * 3);
+
+      let menuGlitch = 0;
+      if (inMenu) {
+        _menuGlitchTimer -= dt;
+        if (_menuGlitchTimer <= 0) {
+          if (Math.random() < 0.15) {
+            _menuGlitchAmount = 0.4 + Math.random() * 0.5;
+            _menuGlitchTimer = 0.06 + Math.random() * 0.15;
+          } else {
+            _menuGlitchAmount = 0;
+            _menuGlitchTimer = 0.3 + Math.random() * 1.5;
+          }
+        }
+        menuGlitch = _menuGlitchAmount;
+      } else {
+        _menuGlitchAmount = 0;
+      }
+
+      // Roll glitch lerp
+      const rollTarget = phase === 'POLL' ? 1 : 0;
+      _rollLerp += (rollTarget - _rollLerp) * Math.min(1, dt * 4);
+
+      // ── Stress-driven effects ──
+      const s = Math.min(1, stress);
+
+      // B&W: occasional menu glitch + stress desat
+      const desat = menuGlitch + s * 0.7;
+      colorPass.uniforms.saturation.value = Math.max(0.05, 1.15 - desat);
+
+      // Vignette: tighter + darker under stress
+      vignettePass.uniforms.offset.value = 1.0 - s * 0.35;
+      vignettePass.uniforms.darkness.value = 0.35 + s * 1.1;
+
+      // Chromatic aberration: roll + stress
+      chromaPass.uniforms.intensity.value = 0.4 + _rollLerp * 1.8 + s * 0.6;
+
+      // Grain: roll + stress
+      grainPass.uniforms.intensity.value = 0.08 + _rollLerp * 0.08 + s * 0.04;
+
+      // Bloom: subtle increase under stress
+      bloomPass.strength = 0.5 + s * 0.25;
     },
     render() {
       composer.render();

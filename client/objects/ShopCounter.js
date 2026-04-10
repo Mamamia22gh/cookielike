@@ -23,7 +23,6 @@ export class ShopCounter {
     this._doneBtn = null;
     this._budgetSprite = null;
     this._build();
-    this.group.visible = false;
   }
 
   _build() {
@@ -118,7 +117,6 @@ export class ShopCounter {
 
   /* ── API ── */
   showShop(run, offerings) {
-    this.group.visible = true;
     this._clearItems();
 
     // Budget — recreate sprite with updated value
@@ -184,12 +182,11 @@ export class ShopCounter {
   }
 
   hide() {
-    this.group.visible = false;
     this._clearItems();
   }
 
   getInteractables() {
-    if (!this.group.visible) return [];
+    if (this._items.length === 0) return [];
     const list = [];
     for (const item of this._items) list.push(item.hit);
     list.push(this._rerollBtn._hit);
@@ -198,7 +195,7 @@ export class ShopCounter {
   }
 
   update(dt) {
-    if (!this.group.visible) return;
+    if (this._items.length === 0) return;
     const t = Date.now() * 0.001;
     for (let i = 0; i < this._items.length; i++) {
       const item = this._items[i];
