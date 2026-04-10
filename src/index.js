@@ -36,6 +36,7 @@ export function createGame(options = {}) {
     shopBuyArtifact:    (index)                     => loop.shopBuyArtifact(index),
     shopBuy:            (actionId, target)           => loop.shopBuy(actionId, target),
     shopReroll:         ()                          => loop.shopReroll(),
+    skipChoice:         ()                          => loop.skipChoice(),
     endShop:            ()                          => loop.endShop(),
 
     // ─── Events ───

@@ -134,6 +134,7 @@ class App {
   }
 
   _startFirstPerson() {
+    if (this._inMenu === false) return; // Already in first person
     this._inMenu = false;
     this.canvas.classList.remove('menu-cursor');
     this.audio.play('click');
@@ -149,6 +150,7 @@ class App {
       if (t >= 1) {
         this.factory.controls.lock();
         this.game.startRun();
+        this.game.startRound();
         return;
       }
       const ease = 1 - Math.pow(1 - t, 3);

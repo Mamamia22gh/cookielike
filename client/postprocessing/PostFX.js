@@ -3,6 +3,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { SSAOPass } from 'three/examples/jsm/postprocessing/SSAOPass.js';
 
 /* ── Custom shaders ── */
 
@@ -218,6 +219,14 @@ export function createPostFX(renderer, scene, camera) {
   const renderPass = new RenderPass(scene, camera);
   composer.addPass(renderPass);
 
+  // SSAO — ambient occlusion (corners, crevices, under furniture)
+  const ssaoPass = new SSAOPass(scene, camera, size.x, size.y);
+  ssaoPass.kernelRadius = 0.5;
+  ssaoPass.minDistance = 0.001;
+  ssaoPass.maxDistance = 0.08;
+  ssaoPass.output = SSAOPass.OUTPUT.Default;
+  composer.addPass(ssaoPass);
+
   // Pannini first — geometric warp before any blur/bloom
   const panniniPass = new ShaderPass(PanniniShader);
   panniniPass.uniforms.aspect.value = size.x / size.y;
@@ -265,6 +274,7 @@ export function createPostFX(renderer, scene, camera) {
     grainPass,
     resize(w, h) {
       composer.setSize(w, h);
+      ssaoPass.setSize(w, h);
       pixelPass.uniforms.resolution.value.set(w, h);
       panniniPass.uniforms.aspect.value = w / h;
     },

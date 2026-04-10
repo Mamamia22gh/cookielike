@@ -1,21 +1,17 @@
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
-import { SlotMachine } from '../objects/SlotMachine.js';
-import { OvenModel } from '../objects/OvenModel.js';
-import { OvenScreen } from '../objects/OvenScreen.js';
-import { DoughProvider } from '../objects/DoughProvider.js';
+import { ProductionLine } from '../objects/ProductionLine.js';
 import { FactoryBuilding } from '../objects/FactoryBuilding.js';
 import { ChoicePedestals } from '../objects/ChoicePedestal.js';
 import { ShopCounter } from '../objects/ShopCounter.js';
 import { CRTTerminal } from '../objects/CRTTerminal.js';
+import { CookieModel } from '../objects/CookieModel.js';
 import { ParticleSystem } from '../effects/ParticleSystem.js';
 import { FloatingTextSystem } from '../effects/FloatingText.js';
 import { AirVent } from '../objects/AirVent.js';
 import { FluorescentLight } from '../objects/FluorescentLight.js';
 import { AmbientHorror } from '../objects/AmbientHorror.js';
 import { CosmicHorror } from '../objects/CosmicHorror.js';
-import { BoxStation } from '../objects/BoxStation.js';
-import { CookieModel } from '../objects/CookieModel.js';
 import { RadioPlayer } from '../objects/RadioPlayer.js';
 import { PALETTE, createMaterial } from '../utils/Materials.js';
 import { makeCountertopTexture, makeMetroTileTexture, makeOxidizedMetalTexture } from '../utils/ProceduralTextures.js';
@@ -49,10 +45,8 @@ export class FactoryScene {
       { minX: -1.9, maxX: 1.9, minZ: -4.7, maxZ: -2.55 },
       // Workbench + machines (south strip)
       { minX: -4.7, maxX: 4.7, minZ: 2.7, maxZ: 4.7 },
-      // Shop counter (west wall)
-      { minX: -4.7, maxX: -3.5, minZ: -0.5, maxZ: 1.5 },
-      // Box station (east wall)
-      { minX: 3.15, maxX: 4.7, minZ: -0.4, maxZ: 1.4 },
+      // Shop shelf (west wall)
+      { minX: -4.7, maxX: -3.5, minZ: -0.8, maxZ: 1.8 },
     ];
 
     this.raycaster = new THREE.Raycaster();
@@ -97,37 +91,15 @@ export class FactoryScene {
     this.scene.add(this.radio.group);
 
     // ── SOUTH: Industrial workbench + production line ──
-    this._buildWorkbench();
+    this.productionLine = new ProductionLine();
+    this.scene.add(this.productionLine.group);
 
-    this.slotMachine = new SlotMachine();
-    this.slotMachine.group.position.set(-2.0, 0, 4.0);
-    this.slotMachine.group.rotation.y = Math.PI;
-    this.slotMachine.group.scale.setScalar(0.5);
-    this.scene.add(this.slotMachine.group);
-
-    this.doughProvider = new DoughProvider();
-    this.doughProvider.group.position.set(-2.0, 0, 4.0);
-    this.doughProvider.group.rotation.y = Math.PI;
-    this.doughProvider.group.scale.setScalar(0.5);
-    this.scene.add(this.doughProvider.group);
-
-    this.ovens = [];
-    this.ovenScreens = [];
-    {
-      const oven = new OvenModel('classic', 0);
-      oven.group.position.set(2.2, 0, 4.0);
-      oven.group.rotation.y = Math.PI;
-      oven.group.scale.setScalar(0.5);
-      this.scene.add(oven.group);
-      this.ovens.push(oven);
-
-      const screen = new OvenScreen(0);
-      screen.group.position.set(3.6, 0, 3.5);
-      screen.group.rotation.y = Math.PI;
-      screen.group.scale.setScalar(0.5);
-      this.scene.add(screen.group);
-      this.ovenScreens.push(screen);
-    }
+    // Provide legacy references for GameBridge compatibility
+    this.slotMachine = this.productionLine.slotMachine;
+    this.doughProvider = this.productionLine.doughProvider;
+    this.ovens = this.productionLine.ovens;
+    this.ovenScreens = this.productionLine.ovenScreens;
+    this.boxStation = this.productionLine.boxStation;
 
     this._floorBoxes = [];
 
@@ -135,15 +107,10 @@ export class FactoryScene {
     this.shopCounter = new ShopCounter();
     this.shopCounter.group.position.set(-4.3, 0, 0.5);
     this.shopCounter.group.rotation.y = Math.PI / 2;
-    this.shopCounter.group.scale.setScalar(0.6);
+    this.shopCounter.group.scale.setScalar(0.85);
     this.scene.add(this.shopCounter.group);
 
-    // ── EAST: Box station ──
-    this.boxStation = new BoxStation();
-    this.boxStation.group.position.set(4.0, 0, 0.5);
-    this.boxStation.group.rotation.y = -Math.PI / 2;
-    this.boxStation.group.scale.setScalar(0.75);
-    this.scene.add(this.boxStation.group);
+    // ── EAST: Nothing (Box station is now on the production line) ──
 
     // ── CENTER: Choice pedestals ──
     this.choicePedestals = new ChoicePedestals();
@@ -160,6 +127,8 @@ export class FactoryScene {
     this._feverLight = null;
     this._pendingBoxData = null;
     this._transfers = [];
+    this._showcaseQueue = [];   // cookies waiting to be showcased
+    this._showcaseActive = null; // currently showcased cookie
 
     // ── Audio listener ──
     this.listener = new THREE.AudioListener();
@@ -322,79 +291,18 @@ export class FactoryScene {
     this.scene.add(deskGrp);
   }
 
-  /** Industrial workbench along the south wall. */
-  _buildWorkbench() {
-    const grp = new THREE.Group();
-    grp.name = 'Workbench';
-
-    const metalMat = createMaterial(PALETTE.metalDark, 0.3, 0.8);
-
-    // Textured countertop (worn oiled wood)
-    const counterTex = makeCountertopTexture(512);
-    const woodMat = new THREE.MeshStandardMaterial({ map: counterTex, roughness: 0.7, metalness: 0.05 });
-
-    // Continuous counter top
-    const top = new THREE.Mesh(new THREE.BoxGeometry(9.0, 0.06, 1.4), woodMat);
-    top.position.set(0, 0.88, 3.7);
-    top.castShadow = true;
-    top.receiveShadow = true;
-    grp.add(top);
-
-    // Front apron
-    const apron = new THREE.Mesh(new THREE.BoxGeometry(9.0, 0.12, 0.04), woodMat);
-    apron.position.set(0, 0.82, 3.0);
-    grp.add(apron);
-
-    // Metal legs (in visible gaps between machines)
-    for (const x of [-4.2, -0.8, 0.8, 4.2]) {
-      for (const z of [3.1, 4.3]) {
-        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.88, 6), metalMat);
-        leg.position.set(x, 0.44, z);
-        grp.add(leg);
-      }
-    }
-
-    // Lower foot rails
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(9.0, 0.035, 0.035), metalMat);
-    rail.position.set(0, 0.12, 3.1);
-    grp.add(rail);
-    const rail2 = new THREE.Mesh(new THREE.BoxGeometry(9.0, 0.035, 0.035), metalMat);
-    rail2.position.set(0, 0.12, 4.3);
-    grp.add(rail2);
-
-    // Textured metro tile backsplash
-    const tileTex = makeMetroTileTexture(512);
-    const tileMat = new THREE.MeshStandardMaterial({ map: tileTex, roughness: 0.4, metalness: 0.1 });
-    const splash = new THREE.Mesh(new THREE.BoxGeometry(9.2, 1.4, 0.05), tileMat);
-    splash.position.set(0, 1.55, 4.87);
-    grp.add(splash);
-
-    // Textured utility pipe (oxidized metal)
-    const pipeTex = makeOxidizedMetalTexture(256);
-    const pipeMat = new THREE.MeshStandardMaterial({ map: pipeTex, roughness: 0.45, metalness: 0.7 });
-    const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 9.0, 8), pipeMat);
-    pipe.rotation.z = Math.PI / 2;
-    pipe.position.set(0, 2.35, 4.82);
-    grp.add(pipe);
-
-    // Pipe brackets
-    for (const x of [-3.5, -1.0, 1.5, 4.0]) {
-      const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.15, 0.06), metalMat);
-      bracket.position.set(x, 2.28, 4.84);
-      grp.add(bracket);
-    }
-
-    this.scene.add(grp);
-  }
-
   _setupLights() {
-    // No global ambient or directional light, only the central point light.
-    // Extremely faint ambient just so absolute black isn't pitch black.
-    this._ambientLight = new THREE.AmbientLight(0xff1100, 0.04);
+    // Brighter ambient light to see everything properly
+    this._ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
     this.scene.add(this._ambientLight);
 
     // No central ceiling light — room lit by monster + fluorescents
     this._centralLight = null;
+
+    // Brighter fill light at room center
+    const fillLight = new THREE.PointLight(0xffeedd, 2.5, 15, 1.0);
+    fillLight.position.set(0, 3.0, 0);
+    this.scene.add(fillLight);
   }
 
   /* ── Movement (AZERTY + QWERTY) ── */
@@ -456,29 +364,32 @@ export class FactoryScene {
     // Radio (always interactable)
     targets.push(this.radio.hitZone);
 
+    // Workshop interactions based on phase
+    const prodInteractables = this.productionLine.getInteractables();
+
     if (this._phase === 'PRODUCTION') {
-      // Dough provider
-      targets.push(this.doughProvider.hitZone);
-      // Lever (only when machine is idle, not crafting)
-      targets.push(this.slotMachine.lever);
-      // Oven hitboxes (cookies on screen + door + grab tray)
-      for (const screen of this.ovenScreens) {
-        targets.push(...screen.getHitboxes());
-      }
-      for (const oven of this.ovens) {
-        targets.push(...oven.getCookieHitboxes());
-      }
-      // Box station (deposit)
-      targets.push(this.boxStation.hitZone);
+      targets.push(...prodInteractables.filter(m => 
+        m.userData.action === 'pour_dough' ||
+        m.userData.action === 'pull_lever' ||
+        m.userData.action === 'extract_cookie' ||
+        m.userData.action === 'start_oven' ||
+        m.userData.action === 'open_oven_door' ||
+        m.userData.action === 'grab_tray' ||
+        m.userData.action === 'deposit_box'
+      ));
     }
 
     if (this._phase === 'POLL') {
-      targets.push(...this.slotMachine.getInteractables());
+      targets.push(...prodInteractables.filter(m => 
+        m.userData.action === 'poll_reroll' || 
+        m.userData.action === 'poll_confirm' ||
+        m.userData.action === 'pull_lever'
+      ));
     }
 
     if (this._phase === 'CHOICE') {
       targets.push(...this.choicePedestals.getInteractables());
-      targets.push(...this.slotMachine.getInteractables()); // target selection
+      targets.push(...prodInteractables.filter(m => m.userData.action === 'target_select'));
     }
 
     if (this._phase === 'SHOP') {
@@ -501,6 +412,9 @@ export class FactoryScene {
     this.slotMachine.clearTargetSelection();
 
     if (phase === 'IDLE') this.terminal.showIdle();
+    if (phase === 'PREVIEW') {
+      this.slotMachine.activate();
+    }
     if (phase === 'PRODUCTION') {
       this.terminal._showButton('end_round', '[Click] ⏹ Fin du round');
     }
@@ -519,17 +433,8 @@ export class FactoryScene {
   }
 
   startRound(data, run) {
-    // Reset the single oven (swap type if needed)
-    const runOven = run.ovens[0];
-    if (runOven && this.ovens[0].typeId !== runOven.typeId) {
-      this.scene.remove(this.ovens[0].group);
-      const oven = new OvenModel(runOven.typeId, 0);
-      oven.group.position.set(2.2, 0, 4.0);
-      oven.group.rotation.y = Math.PI;
-      oven.group.scale.setScalar(0.5);
-      this.scene.add(oven.group);
-      this.ovens[0] = oven;
-    }
+    // We don't dynamically swap oven models anymore in the monolithic ProductionLine
+    // Instead, the single built-in oven handles all logic.
     this.ovens[0].boxComplete();
     this.ovenScreens[0].boxComplete();
     this.ovens[0].setIndicator(true);
@@ -543,49 +448,198 @@ export class FactoryScene {
   onBoxCreated(data) {
     this._pendingBoxData = data;
     this.slotMachine.animatePull(() => {
-      this._showPendingBox();
+      this._startShowcase();
     });
   }
 
-  _showPendingBox() {
+  /**
+   * Start the cookie showcase: present each cookie one by one in front of the camera,
+   * then send them all to the oven.
+   */
+  _startShowcase() {
     const data = this._pendingBoxData;
     if (!data) return;
     this._pendingBoxData = null;
 
     const { box, ovenIndex } = data;
-    this.particles.emit('pull', this.slotMachine.group.position.clone().add(new THREE.Vector3(0, 3, 0)));
-    const oven = this.ovens[ovenIndex];
-    const screen = this.ovenScreens[ovenIndex];
+    this.particles.emit('pull', new THREE.Vector3(-1.8, 3.5, 4.2));
 
-    if (oven) {
-      const from = this.slotMachine.group.position.clone().add(new THREE.Vector3(0, 1.2, 0));
-      const to = oven.group.position.clone().add(new THREE.Vector3(0, 0.7, 0));
+    // Build the list of cookies to showcase
+    const allCookies = [];
+    if (box.grid) {
+      for (let col = 0; col < box.grid.length; col++) {
+        for (let row = 0; row < box.grid[col].length; row++) {
+          const cell = box.grid[col][row];
+          const recipeId = cell?.recipeId || cell || 'choco';
+          allCookies.push(typeof recipeId === 'string' ? recipeId : 'choco');
+        }
+      }
+    } else {
       const count = Math.min(6, box.cookies?.length || 6);
-
       for (let i = 0; i < count; i++) {
-        const recipeId = box.cookies?.[i]?.recipeId || 'choco';
-        const mesh = CookieModel.createSmall(recipeId);
-        mesh.scale.setScalar(0.5);
-        mesh.position.copy(from);
-        this.scene.add(mesh);
+        allCookies.push(box.cookies?.[i]?.recipeId || 'choco');
+      }
+    }
 
-        this._transfers.push({
-          mesh,
-          from: from.clone(),
-          to: to.clone(),
-          t: -i * 0.08,
-          duration: 0.5,
-          done: false,
-        });
+    // Group by recipeId with count
+    const counts = {};
+    for (const id of allCookies) counts[id] = (counts[id] || 0) + 1;
+    this._showcaseQueue = Object.entries(counts).map(([recipeId, count]) => ({ recipeId, count }));
+    this._showcaseOvenIndex = ovenIndex;
+    this._showcaseBox = box;
+    this._showcaseActive = null;
+    this._showcaseDoneCount = 0;
+    this._showcaseTotalCount = allCookies.length;
+
+    // Kick off the first one
+    this._nextShowcase();
+  }
+
+  _nextShowcase() {
+    if (this._showcaseQueue.length === 0) {
+      // All shown — send cookies to oven
+      this._finishShowcase();
+      return;
+    }
+
+    const item = this._showcaseQueue.shift();
+    const mesh = CookieModel.createLarge(item.recipeId);
+    mesh.scale.setScalar(0);
+
+    // Add multiplier label if count > 1
+    if (item.count > 1) {
+      const c = document.createElement('canvas');
+      c.width = 128; c.height = 64;
+      const ctx = c.getContext('2d');
+      ctx.font = 'bold 48px sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 5;
+      ctx.strokeText(`\u00D7${item.count}`, 64, 32);
+      ctx.fillStyle = '#ffd700';
+      ctx.fillText(`\u00D7${item.count}`, 64, 32);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const label = new THREE.Sprite(
+        new THREE.SpriteMaterial({ map: tex, transparent: true }),
+      );
+      label.scale.set(0.5, 0.25, 1);
+      label.position.set(0.3, 0.15, 0);
+      mesh.add(label);
+    }
+
+    this.scene.add(mesh);
+
+    // Position the cookie right in front of the camera
+    const cam = this.camera;
+    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cam.quaternion);
+    const showcasePos = cam.position.clone()
+      .add(dir.multiplyScalar(1.2))
+      .add(new THREE.Vector3(0, -0.15, 0));
+    mesh.position.copy(showcasePos);
+
+    // Tilt so the flat top of the cookie faces the camera
+    mesh.lookAt(cam.position);
+    mesh.rotation.x -= Math.PI / 2;
+
+    this._showcaseActive = {
+      mesh,
+      recipeId: item.recipeId,
+      phase: 'appear',   // appear → hold → flyaway
+      t: 0,
+      showcasePos: showcasePos.clone(),
+      startRot: mesh.rotation.y,
+    };
+
+    // Sound callback
+    if (this._onShowcaseCookie) this._onShowcaseCookie(item.recipeId);
+  }
+
+  _updateShowcase(dt) {
+    const s = this._showcaseActive;
+    if (!s) return;
+
+    s.t += dt;
+    const cam = this.camera;
+
+    if (s.phase === 'appear') {
+      const dur = 0.20;
+      const p = Math.min(1, s.t / dur);
+      // Elastic ease-out
+      const elastic = p === 1 ? 1 : 1 - Math.pow(2, -10 * p) * Math.cos((p * 10 - 0.75) * (2 * Math.PI / 3));
+      s.mesh.scale.setScalar(elastic * 0.6);
+      s.mesh.rotation.y = s.startRot + p * Math.PI * 2;
+
+      // Keep in front of camera
+      const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
+      const pos = cam.position.clone().add(dir.multiplyScalar(1.2)).add(new THREE.Vector3(0, -0.15, 0));
+      s.mesh.position.copy(pos);
+      s.showcasePos.copy(pos);
+
+      if (p >= 1) { s.phase = 'hold'; s.t = 0; }
+    }
+    else if (s.phase === 'hold') {
+      const dur = 0.12;
+      const p = Math.min(1, s.t / dur);
+      s.mesh.rotation.y += dt * 4;
+      s.mesh.scale.setScalar(0.6 + Math.sin(p * Math.PI) * 0.06);
+
+      // Keep in front of camera
+      const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
+      const pos = cam.position.clone().add(dir.multiplyScalar(1.2)).add(new THREE.Vector3(0, -0.15, 0));
+      s.mesh.position.copy(pos);
+      s.showcasePos.copy(pos);
+
+      if (p >= 1) {
+        s.phase = 'flyaway';
+        s.t = 0;
+        s.flyFrom = s.mesh.position.clone();
+        // Target: oven position
+        s.flyTo = new THREE.Vector3(1.0, 1.45, 4.4);
+      }
+    }
+    else if (s.phase === 'flyaway') {
+      const dur = 0.22;
+      const p = Math.min(1, s.t / dur);
+      const ease = 1 - Math.pow(1 - p, 3);
+
+      s.mesh.position.lerpVectors(s.flyFrom, s.flyTo, ease);
+      s.mesh.position.y += Math.sin(p * Math.PI) * 0.6;
+      s.mesh.rotation.y += dt * 12;
+      s.mesh.scale.setScalar(0.6 * (1 - ease * 0.7));
+
+      if (s.mesh.material) {
+        s.mesh.material.transparent = true;
+        s.mesh.material.opacity = 1 - ease * 0.5;
       }
 
-      setTimeout(() => {
-        oven.loadBox(box);
-        if (screen) screen.loadBox(box);
-      }, 400);
-    } else {
-      if (screen) screen.loadBox(box);
+      if (p >= 1) {
+        this.scene.remove(s.mesh);
+        this._showcaseActive = null;
+        this._showcaseDoneCount++;
+
+        // Quick burst particle at oven
+        this.particles.emit('pull', s.flyTo.clone().add(new THREE.Vector3(0, 0.5, 0)));
+
+        // Next cookie
+        setTimeout(() => this._nextShowcase(), 20);
+      }
     }
+  }
+
+  _finishShowcase() {
+    const oven = this.ovens[this._showcaseOvenIndex];
+    const screen = this.ovenScreens[this._showcaseOvenIndex];
+    const box = this._showcaseBox;
+
+    if (oven) oven.loadBox(box);
+    if (screen) screen.loadBox(box);
+
+    // Lever goes green to start cooking
+    this.slotMachine.setOvenStart();
+
+    this._showcaseBox = null;
+    this._showcaseOvenIndex = null;
   }
 
   onOvenProgress(data) {
@@ -602,7 +656,7 @@ export class FactoryScene {
     if (screen) screen.cookieExtracted(data.col, data.row);
 
     const pos = oven
-      ? oven.group.position.clone().add(new THREE.Vector3(0, 1.5, 0.5))
+      ? new THREE.Vector3(1.2, 1.95, 4.5)
       : new THREE.Vector3(0, 2, 0);
     const zone = data.cookingResult.zone;
     if (zone === 'PERFECT' || zone === 'SWEET_SPOT') {
@@ -620,7 +674,7 @@ export class FactoryScene {
     const oven = this.ovens[data.ovenIndex];
     if (oven) {
       oven.cookieBurned(data.col, data.row);
-      this.particles.emit('burn', oven.group.position.clone().add(new THREE.Vector3(0, 1.5, 0)));
+      this.particles.emit('burn', new THREE.Vector3(1.2, 1.65, 4.2));
     }
     const screen = this.ovenScreens[data.ovenIndex];
     if (screen) screen.cookieBurned(data.col, data.row);
@@ -643,28 +697,15 @@ export class FactoryScene {
     const combo = data.box?.gridResult?.bestGroup;
     if (combo && combo.size >= 3) {
       const ovenPos = oven
-        ? oven.group.position.clone().add(new THREE.Vector3(0, 2.5, 0.5))
+        ? new THREE.Vector3(1.2, 2.65, 4.5)
         : dropPos.clone().add(new THREE.Vector3(0, 1.5, 0));
       this.floatingText.combo(combo.name, combo.multiplier, ovenPos);
     }
   }
 
   onBenneAdded(data) {
-    const size = 0.2 + Math.random() * 0.1;
-    const geo = new THREE.BoxGeometry(size, size * 0.6, size);
-    const hue = Math.min(1, data.value / 300);
-    const color = new THREE.Color().setHSL(0.1 + hue * 0.15, 0.6, 0.45 + hue * 0.15);
-    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.1 });
-    const box = new THREE.Mesh(geo, mat);
-    box.position.set(
-      -1.5 + (this._floorBoxes.length % 4) * 1.0,
-      size * 0.3,
-      1.0 + Math.floor(this._floorBoxes.length / 4) * 0.5,
-    );
-    box.rotation.y = (Math.random() - 0.5) * 0.4;
-    box.castShadow = true;
-    this.scene.add(box);
-    this._floorBoxes.push(box);
+    // Launch box up through the pneumatic tube
+    this.productionLine.launchBox(data.value);
   }
 
   onFeverStart() {
@@ -684,10 +725,11 @@ export class FactoryScene {
 
   startPoll(recipes, rerollsLeft) { this.slotMachine.startRoll(recipes, rerollsLeft); }
   updatePoll(rerollsLeft) { this.slotMachine.setRerolls(rerollsLeft); }
+  lockRecipesAndReady() { this.slotMachine.lockRecipesAndReady(); }
 
   showChoices(choices) { this.choicePedestals.showChoices(choices); }
-  showTargetSelection(pool) { this.slotMachine.showTargetSelection(pool); }
-  clearTargetSelection() { this.slotMachine.clearTargetSelection(); }
+  showTargetSelection(pool) { this.productionLine.showTargetSelection(pool); }
+  clearTargetSelection() { this.productionLine.clearTargetSelection(); }
   showShop(run, offerings) { this.shopCounter.showShop(run, offerings); }
   showPreview(data) { this.terminal.showPreview(data); }
   showResults(data) { this.terminal.showResults(data); }
@@ -697,16 +739,14 @@ export class FactoryScene {
   update(dt) {
     this._updateMovement(dt);
     this._updateTransfers(dt);
-    this.slotMachine.update(dt);
+    this._updateShowcase(dt);
+    this.productionLine.update(dt);
     this.particles.update(dt);
     this.floatingText.update(dt);
-    this.doughProvider.update(dt);
     this.choicePedestals.update(dt);
     this.shopCounter.update(dt);
     this.terminal.update(dt);
     this.radio.update(dt);
-    for (const oven of this.ovens) oven.update(dt);
-    for (const screen of this.ovenScreens) screen.update(dt);
     for (const vent of this.airVents) vent.update(dt);
     for (const light of this.overheadLights) light.update(dt);
     this.ambientHorror.update(dt);

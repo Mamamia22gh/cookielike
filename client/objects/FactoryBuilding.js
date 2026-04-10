@@ -30,14 +30,14 @@ export class FactoryBuilding {
     this.group.add(floor);
 
     // Parquet plank lines (horizontal wood grain, Z direction)
-    const plankMat = createMaterial(0x7a5c10, 0.8, 0.02);
+    const plankMat = createMaterial(0x3a2c08, 0.9, 0.0);
     for (let z = -R; z <= R; z += 0.25) {
       const line = new THREE.Mesh(new THREE.BoxGeometry(R * 2, 0.003, 0.015), plankMat);
       line.position.set(0, 0.002, z);
       this.group.add(line);
     }
     // Perpendicular shorter joints (offset every plank)
-    const jointMat = createMaterial(0x6a4c0e, 0.8, 0.02);
+    const jointMat = createMaterial(0x2a1c06, 0.9, 0.0);
     for (let x = -R; x <= R; x += 1.2) {
       for (let z = -R; z <= R; z += 0.5) {
         const joint = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.003, 0.25), jointMat);
@@ -82,12 +82,16 @@ export class FactoryBuilding {
     const ceilN = new THREE.Mesh(new THREE.PlaneGeometry(R * 2, ceilHalfZ), ceilMat);
     ceilN.rotation.x = Math.PI / 2;
     ceilN.position.set(0, H, -(skylightD / 2 + ceilHalfZ / 2));
+    ceilN.castShadow = true;
+    ceilN.receiveShadow = true;
     this.group.add(ceilN);
 
     // South half
     const ceilS = new THREE.Mesh(new THREE.PlaneGeometry(R * 2, ceilHalfZ), ceilMat);
     ceilS.rotation.x = Math.PI / 2;
     ceilS.position.set(0, H, skylightD / 2 + ceilHalfZ / 2);
+    ceilS.castShadow = true;
+    ceilS.receiveShadow = true;
     this.group.add(ceilS);
 
     // Side strips (east/west of skylight)
@@ -95,11 +99,15 @@ export class FactoryBuilding {
     const ceilE = new THREE.Mesh(new THREE.PlaneGeometry(sideStripW, skylightD), ceilMat);
     ceilE.rotation.x = Math.PI / 2;
     ceilE.position.set(skylightW / 2 + sideStripW / 2, H, 0);
+    ceilE.castShadow = true;
+    ceilE.receiveShadow = true;
     this.group.add(ceilE);
 
     const ceilW = new THREE.Mesh(new THREE.PlaneGeometry(sideStripW, skylightD), ceilMat);
     ceilW.rotation.x = Math.PI / 2;
     ceilW.position.set(-(skylightW / 2 + sideStripW / 2), H, 0);
+    ceilW.castShadow = true;
+    ceilW.receiveShadow = true;
     this.group.add(ceilW);
 
     // Skylight glass (semi-transparent, dirty)

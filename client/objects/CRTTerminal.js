@@ -396,33 +396,82 @@ export class CRTTerminal {
     this._renderMenu();
   }
 
+  showProductionHUD(round, quota) {
+    this._menuMode = 'ingame';
+    this._targetLightColor.setHex(0xff2222);
+    this._selectedIndex = 0;
+    this._menuItems = [{ label: '⏹  FIN DU ROUND', action: 'end_round' }];
+
+    this._clear();
+
+    // Header
+    this._text('═══ PRODUCTION ═══', 400, 70, { align: 'center', size: 26 });
+    this._text(`ROUND ${round}/15`, 400, 120, { align: 'center', size: 22, color: '#00bb44' });
+
+    // Big quota display in red
+    this._text('OBJECTIF', 400, 220, { align: 'center', size: 22, color: '#ff4444' });
+    this._text(`${quota} 🪙`, 400, 290, { align: 'center', size: 64, color: '#ff4444' });
+
+    // Decorative border around quota
+    const ctx = this._ctx;
+    ctx.strokeStyle = '#ff4444';
+    ctx.lineWidth = 2;
+    ctx.shadowColor = '#ff4444';
+    ctx.shadowBlur = 10;
+    ctx.strokeRect(180, 195, 440, 120);
+    ctx.shadowBlur = 0;
+
+    // Creepy warning
+    this._text('⚠ Ne regardez pas en haut ⚠', 400, 370, { align: 'center', size: 22, color: '#ff2222' });
+
+    // Status line
+    this._text('🍪 MACHINE PRÊTE', 400, 410, { align: 'center', size: 20, color: '#00bb44' });
+    this._text('Versez la pâte → Tirez le levier', 400, 440, { align: 'center', size: 18, color: '#006622' });
+
+    // End round button
+    const sel = this._selectedIndex === 0;
+    this._text((sel ? '►  ' : '   ') + '[ FIN DU ROUND ]', 400, 520, { align: 'center', size: 22, color: sel ? '#ff6666' : '#662222' });
+
+    this._showButton('end_round', '[Entrée] ⏹ Fin du round');
+    this._flush();
+  }
+
   showPreview(data) {
     this._menuMode = 'ingame';
-    this._targetLightColor.setHex(0x00ff44);
+    this._targetLightColor.setHex(0xff2222);
     const { round, quota, paste } = data;
     this._selectedIndex = 0;
     this._menuItems = [{ label: '▶  LANCER LE ROUND', action: 'start_round' }];
 
     this._clear();
-    this._text(`═══ ORDRE #${round} ═══`, 400, 70, { align: 'center', size: 26 });
-    this._text(`Round ........... ${round}/15`, 80, 140, { size: 22 });
-    this._text(`Quota ........... ${quota} 🪙`, 80, 175, { size: 22 });
-    this._text(`Pâte ............ ${paste}`, 80, 210, { size: 22 });
-    this._text(`Timer ........... 300s`, 80, 245, { size: 22 });
 
-    if (data.pool?.length) {
-      this._text('── POOL ──', 480, 140, { size: 20, color: '#00bb44' });
-      const total = data.pool.reduce((s, e) => s + e.weight, 0);
-      let y = 175;
-      for (const e of data.pool.slice(0, 5)) {
-        const pct = total > 0 ? Math.round(e.weight / total * 100) : 0;
-        this._text(`${e.recipeId} ×${e.weight} (${pct}%)`, 480, y, { size: 18, color: '#00aa44' });
-        y += 28;
-      }
-    }
+    // Header
+    this._text(`═══ ORDRE #${round} ═══`, 400, 55, { align: 'center', size: 26 });
+    this._text(`Round ${round}/15`, 400, 95, { align: 'center', size: 20, color: '#00bb44' });
 
+    // Big quota display in red
+    this._text('OBJECTIF', 400, 160, { align: 'center', size: 22, color: '#ff4444' });
+    this._text(`${quota} 🪙`, 400, 225, { align: 'center', size: 64, color: '#ff4444' });
+
+    // Decorative border around quota
+    const ctx = this._ctx;
+    ctx.strokeStyle = '#ff4444';
+    ctx.lineWidth = 2;
+    ctx.shadowColor = '#ff4444';
+    ctx.shadowBlur = 10;
+    ctx.strokeRect(180, 140, 440, 115);
+    ctx.shadowBlur = 0;
+
+    // Info
+    this._text(`Pâte: ${paste}`, 400, 290, { align: 'center', size: 20, color: '#00bb44' });
+
+    // Creepy warning
+    this._text('⚠ Ne regardez pas en haut ⚠', 400, 370, { align: 'center', size: 28, color: '#ff2222' });
+
+    // Start button
     const sel = this._selectedIndex === 0;
     this._text((sel ? '►  ' : '   ') + '[ LANCER ]', 400, 480, { align: 'center', size: 26, color: sel ? '#00ff88' : '#007733' });
+    this._text('▲▼ NAVIGUER    ENTRÉE VALIDER', 400, 550, { align: 'center', size: 20, color: '#005522' });
     this._flush();
     this._showButton('start_round', '[Entrée] Lancer');
   }

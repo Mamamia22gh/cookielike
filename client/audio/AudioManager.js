@@ -48,6 +48,8 @@ export class AudioManager {
         case 'craft':   this._playCraft(dest); break;
         case 'oven_start': this._playOvenStart(dest); break;
         case 'oven_hum':   this._playOvenHum(dest); break;
+        case 'showcase':   this._playShowcase(dest); break;
+        case 'notification': this._playNotification(dest); break;
       }
     } catch { /* ctx suspended */ }
   }
@@ -287,6 +289,52 @@ export class AudioManager {
       osc.start(ctx.currentTime + i * 0.06);
       osc.stop(ctx.currentTime + i * 0.06 + 0.35);
     });
+  }
+
+  /** Cookie showcase pop — satisfying bright chime. */
+  _playShowcase(dest) {
+    const ctx = this._ctx;
+    const t = ctx.currentTime;
+    // Bright crystalline chime
+    const freqs = [880, 1109, 1319];
+    freqs.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(dest);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, t + i * 0.03);
+      gain.gain.setValueAtTime(0.12, t + i * 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.03 + 0.25);
+      osc.start(t + i * 0.03);
+      osc.stop(t + i * 0.03 + 0.25);
+    });
+    // Sub thump for weight
+    const sub = ctx.createOscillator();
+    const subG = ctx.createGain();
+    sub.connect(subG); subG.connect(dest);
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(150, t);
+    sub.frequency.exponentialRampToValueAtTime(80, t + 0.12);
+    subG.gain.setValueAtTime(0.08, t);
+    subG.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+    sub.start(t); sub.stop(t + 0.15);
+  }
+
+  /** CRT notification — two-tone digital beep. */
+  _playNotification(dest) {
+    const ctx = this._ctx;
+    const t = ctx.currentTime;
+    for (let i = 0; i < 2; i++) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(dest);
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(i === 0 ? 1047 : 1319, t + i * 0.15);
+      gain.gain.setValueAtTime(0.06, t + i * 0.15);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.15 + 0.1);
+      osc.start(t + i * 0.15);
+      osc.stop(t + i * 0.15 + 0.1);
+    }
   }
 
   /** Oven start beep — two ascending tones. */

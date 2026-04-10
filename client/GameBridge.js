@@ -19,18 +19,19 @@ export class GameBridge {
     this.factory.slotMachine.onLock = () => this.audio.playAt('lock', this._machinePos());
     this.factory.slotMachine.onCraftStart = () => this.audio.playAt('craft', this._machinePos());
     this.factory.slotMachine.onCraftDone = () => this.audio.playAt('score', this._machinePos());
+    this.factory._onShowcaseCookie = () => this.audio.play('showcase');
 
     this._bindEvents();
     this.factory.setPhase('IDLE');
   }
 
   /** Get slot machine world position for positional audio. */
-  _machinePos() { return this.factory.slotMachine.group.position; }
+  _machinePos() { return this.factory.slotMachine.worldPosition; }
 
   /** Get oven world position. */
   _ovenPos(ovenIndex) {
     const oven = this.factory.ovens[ovenIndex];
-    return oven ? oven.group.position : this._machinePos();
+    return oven ? oven.worldPosition : this._machinePos();
   }
 
   /* ── Interaction from 3D raycaster ── */
@@ -41,8 +42,10 @@ export class GameBridge {
 
     switch (data.action) {
       case 'start_run':
-        this.audio.play('click');
-        g.startRun();
+        if (phase === 'IDLE' || phase === 'GAME_OVER' || phase === 'VICTORY') {
+          this.audio.play('click');
+          g.startRun();
+        }
         break;
 
       case 'radio_next':
@@ -80,7 +83,23 @@ export class GameBridge {
         }
         break;
       case 'pull_lever':
-        if (phase === 'PRODUCTION') g.pullLever();
+        if (phase === 'POLL') {
+          // Lever doubles as reroll during poll
+          g.pollReroll();
+        } else if (phase === 'PRODUCTION') {
+          const slotState = this.factory.slotMachine._state;
+          if (slotState === 'oven_start') {
+            // Green lever — start cooking
+            if (g.startOven(0)) {
+              this.factory.ovenScreens[0]?.startCooking();
+              this.factory.slotMachine.setReadyToPull();
+              this.audio.playAt('oven_start', this._ovenPos(0));
+              this.audio.playAt('oven_hum', this._ovenPos(0));
+            }
+          } else {
+            g.pullLever();
+          }
+        }
         break;
 
       case 'extract_cookie':
@@ -128,7 +147,12 @@ export class GameBridge {
         if (phase === 'POLL') { this.audio.playAt('click', this._machinePos()); g.pollReroll(); }
         break;
       case 'poll_confirm':
-        if (phase === 'POLL') { this.audio.playAt('click', this._machinePos()); g.pollConfirm(); }
+        if (phase === 'POLL') {
+          this.audio.playAt('click', this._machinePos());
+          g.pollConfirm();
+          // Keep recipes displayed and set lever to blink red
+          this.factory.lockRecipesAndReady();
+        }
         break;
 
       case 'choice':
@@ -207,7 +231,10 @@ export class GameBridge {
     });
 
     g.on('round:started', (data) => {
-      this.factory.startRound(data, g.getState().run);
+      const run = g.getState().run;
+      this.factory.startRound(data, run);
+      this.factory.terminal.showProductionHUD(data.round, getQuota(data.round));
+      // Don't activate/reset slot machine — keep the locked recipes visible
       this.hud.setRound(data.round);
     });
 

@@ -433,6 +433,16 @@ export class GameLoop {
     return this.shop.reroll(this.state.run, this.rng);
   }
 
+  skipChoice() {
+    if (this.state.phase !== PHASE.CHOICE) return false;
+    const run = this.state.run;
+    run.shopOfferings = this.shop.generateOfferings(run, this.rng, this.state.meta);
+    run.rerollCount = 0;
+    this.#setPhase(PHASE.SHOP);
+    this.events.emit('shop:opened', { currency: run.shopCurrency, offerings: run.shopOfferings });
+    return true;
+  }
+
   endShop() {
     if (this.state.phase !== PHASE.SHOP) return false;
 

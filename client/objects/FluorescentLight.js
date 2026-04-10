@@ -13,7 +13,7 @@ export class FluorescentLight {
     this._sound = null;
     this._started = false;
     this._crackleTimer = 0;
-    this._baseIntensity = 0.5; // Lower intensity per light since we'll use multiple
+    this._baseIntensity = 0.8;
     this._lights = [];
 
     this._build(length);
@@ -27,7 +27,7 @@ export class FluorescentLight {
     this.group.add(housing);
 
     // Tube
-    this._tubeMat = createGlowMaterial(0xff2222, 1.0);
+    this._tubeMat = createGlowMaterial(0xff2222, 0.15);
     const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, length - 0.1, 8), this._tubeMat);
     tube.rotation.z = Math.PI / 2;
     tube.position.y = -0.02;
@@ -39,10 +39,12 @@ export class FluorescentLight {
     const startX = -length / 2 + spacing / 2;
 
     for (let i = 0; i < numLights; i++) {
-      const light = new THREE.PointLight(0xff2222, this._baseIntensity, 8);
-      light.position.set(startX + i * spacing, -0.1, 0);
+      const light = new THREE.PointLight(0xff2222, this._baseIntensity, 18);
+      light.position.set(startX + i * spacing, -0.25, 0);
       light.castShadow = true;
       light.shadow.bias = -0.002;
+      // Hide the light source from bloom by pushing it behind the housing
+      light.visible = true;
       this.group.add(light);
       this._lights.push(light);
     }

@@ -109,18 +109,32 @@ export class CosmicHorror {
 
     // ── Eerie glow light (illuminates the room through skylight) ──
     // ── Eerie glow light (illuminates the room through skylight) ──
-    const light = new THREE.PointLight(0xff2200, 3.0, 80);
+    // PointLight large portée, decay=0 pour atteindre le sol sans s'affaiblir
+    const light = new THREE.PointLight(0xff2200, 2.5, 0, 0); // distance=0 = infini, decay=0
     light.position.set(0, 0, 0);
-    light.decay = 0.8;
+    light.castShadow = true;
+    light.shadow.mapSize.width = 1024;
+    light.shadow.mapSize.height = 1024;
+    light.shadow.bias = -0.002;
+    light.shadow.camera.near = 1;
+    light.shadow.camera.far = 80;
     this.eyePivot.add(light);
     this._light = light;
 
-    // SpotLight pointing straight down into the room
-    this._downLight = new THREE.SpotLight(0xff1100, 5.0, 100, Math.PI / 5, 0.4, 0.8);
-    this._downLight.position.set(0, 0, -2);
-    this._downLight.target.position.set(0, 0, -60);
-    this.eyePivot.add(this._downLight);
-    this.eyePivot.add(this._downLight.target);
+    // SpotLight worldspace : on l'attache au GROUP (pas au pivot) pour qu'il pointe toujours vers le bas
+    this._downLight = new THREE.SpotLight(0xff1100, 8.0, 0, Math.PI / 4, 0.3, 0);
+    this._downLight.position.set(0, 0, 0); // centre de l'oeil dans le groupe
+    this._downLight.castShadow = true;
+    this._downLight.shadow.mapSize.width = 2048;
+    this._downLight.shadow.mapSize.height = 2048;
+    this._downLight.shadow.bias = -0.002;
+    this._downLight.shadow.camera.near = 1;
+    this._downLight.shadow.camera.far = 80;
+    this._downLightTarget = new THREE.Object3D();
+    this._downLightTarget.position.set(0, -100, 0); // toujours vers le bas en worldspace
+    this.group.add(this._downLight);
+    this.group.add(this._downLightTarget);
+    this._downLight.target = this._downLightTarget;
 
     // Current tracking target rotation
     this._targetQuat = new THREE.Quaternion();
